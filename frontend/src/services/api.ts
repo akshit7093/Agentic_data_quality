@@ -22,6 +22,8 @@ export const dataSourceApi = {
     api.get(`/datasources/${id}/resources`, { params: { path } }).then(r => r.data),
   getSchema: (id: string, resourcePath: string) => 
     api.get(`/datasources/${id}/schema`, { params: { resource_path: resourcePath } }).then(r => r.data),
+  getPreview: (id: string, resourcePath: string, limit: number = 20) =>
+    api.get(`/datasources/${id}/preview`, { params: { resource_path: resourcePath, limit } }).then(r => r.data),
 };
 
 // Validation Rules

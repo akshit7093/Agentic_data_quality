@@ -16,21 +16,33 @@ import {
   Search,
   RefreshCw,
   AlertCircle,
+  Upload,
+  BarChart3,
+  Eye,
 } from 'lucide-react';
 import { useDataSources } from '@/hooks/useDataSources';
 import { useSubmitValidation } from '@/hooks/useValidations';
 import { useLLMHealth } from '@/hooks/useSystem';
+import { dataSourceApi, fileApi } from '@/services/api';
 import Modal from '@/components/Modal';
 
 interface DataResource {
   name: string;
-  type: 'table' | 'file' | 'folder' | 'container';
+  type: 'table' | 'file' | 'folder' | 'container' | 'directory';
   path: string;
   size?: string;
   rowCount?: number;
   columnCount?: number;
   columns?: { name: string; type: string }[];
+  format?: string;
   children?: DataResource[];
+}
+
+interface PreviewData {
+  columns: { name: string; type: string }[];
+  rows: Record<string, any>[];
+  total_rows: number;
+  preview_count: number;
 }
 
 const VALIDATION_MODES = [
@@ -54,67 +66,17 @@ const VALIDATION_MODES = [
   },
 ];
 
-// Mock resources for demonstration
-const MOCK_RESOURCES: Record<string, DataResource[]> = {
-  sqlite: [
-    {
-      name: 'customers',
-      type: 'table',
-      path: 'customers',
-      rowCount: 1000,
-      columnCount: 10,
-      columns: [
-        { name: 'customer_id', type: 'INTEGER' },
-        { name: 'email', type: 'TEXT' },
-        { name: 'first_name', type: 'TEXT' },
-        { name: 'last_name', type: 'TEXT' },
-        { name: 'phone', type: 'TEXT' },
-        { name: 'date_of_birth', type: 'DATE' },
-        { name: 'country', type: 'TEXT' },
-        { name: 'created_at', type: 'TIMESTAMP' },
-        { name: 'status', type: 'TEXT' },
-        { name: 'lifetime_value', type: 'REAL' },
-      ],
-    },
-    {
-      name: 'orders',
-      type: 'table',
-      path: 'orders',
-      rowCount: 5000,
-      columnCount: 10,
-      columns: [
-        { name: 'order_id', type: 'INTEGER' },
-        { name: 'customer_id', type: 'INTEGER' },
-        { name: 'product_id', type: 'INTEGER' },
-        { name: 'quantity', type: 'INTEGER' },
-        { name: 'unit_price', type: 'REAL' },
-        { name: 'total_amount', type: 'REAL' },
-        { name: 'order_date', type: 'TIMESTAMP' },
-        { name: 'shipping_address', type: 'TEXT' },
-        { name: 'status', type: 'TEXT' },
-        { name: 'discount_code', type: 'TEXT' },
-      ],
-    },
-    {
-      name: 'products',
-      type: 'table',
-      path: 'products',
-      rowCount: 200,
-      columnCount: 9,
-    },
-    {
-      name: 'sales_transactions',
-      type: 'table',
-      path: 'sales_transactions',
-      rowCount: 10000,
-      columnCount: 8,
-    },
-  ],
+// Source type display info
+const SOURCE_INFO: Record<string, { label: string; icon: any; color: string }> = {
+  'local-test': { label: 'Test Database', icon: Database, color: 'blue' },
+  'file-upload': { label: 'Upload File', icon: FileText, color: 'green' },
+  'adls-mock': { label: 'ADLS Gen2 Mock', icon: Folder, color: 'purple' },
+  'local-files': { label: 'Local Test Files', icon: Folder, color: 'orange' },
 };
 
 export default function NewValidation() {
   const navigate = useNavigate();
-  const { data: dataSources } = useDataSources();
+  const { data: dataSources, isLoading: dsLoading } = useDataSources();
   const submitValidation = useSubmitValidation();
   const { data: llmHealth } = useLLMHealth();
 
@@ -128,10 +90,63 @@ export default function NewValidation() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
 
-  // Get resources for selected data source
-  const resources = selectedDataSource
-    ? MOCK_RESOURCES[dataSources?.find((ds) => ds.id === selectedDataSource)?.source_type || 'sqlite'] || []
-    : [];
+  // Dynamic resource loading
+  const [resources, setResources] = useState<DataResource[]>([]);
+  const [resourcesLoading, setResourcesLoading] = useState(false);
+  const [previewData, setPreviewData] = useState<PreviewData | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  // File upload
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+
+  // Fetch resources when data source changes
+  useEffect(() => {
+    if (selectedDataSource && step === 'browse') {
+      loadResources();
+    }
+  }, [selectedDataSource, step]);
+
+  const loadResources = async () => {
+    setResourcesLoading(true);
+    try {
+      const data = await dataSourceApi.getResources(selectedDataSource);
+      setResources(data);
+    } catch (err) {
+      console.error('Failed to load resources:', err);
+      setResources([]);
+    } finally {
+      setResourcesLoading(false);
+    }
+  };
+
+  const loadPreview = async (resource: DataResource) => {
+    setPreviewLoading(true);
+    try {
+      const data = await dataSourceApi.getPreview(selectedDataSource, resource.path, 20);
+      setPreviewData(data);
+    } catch (err) {
+      console.error('Failed to load preview:', err);
+      setPreviewData(null);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleFileUpload = async () => {
+    if (!uploadFile) return;
+    setUploading(true);
+    try {
+      await fileApi.upload(uploadFile);
+      // Reload resources after upload
+      await loadResources();
+      setUploadFile(null);
+    } catch (err) {
+      console.error('Upload failed:', err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const filteredResources = resources.filter(
     (r) =>
@@ -155,7 +170,7 @@ export default function NewValidation() {
     setIsLoading(true);
     try {
       const result = await submitValidation.mutateAsync({
-        data_source_id: selectedDataSource || 'local',
+        data_source_id: selectedDataSource,
         target_path: selectedResource.path,
         validation_mode: validationMode,
         sample_size: sampleSize,
@@ -167,6 +182,24 @@ export default function NewValidation() {
       }
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const getSourceLabel = () => {
+    const info = SOURCE_INFO[selectedDataSource];
+    if (info) return info.label;
+    const ds = dataSources?.find((d) => d.id === selectedDataSource);
+    return ds?.name || 'Data Source';
+  };
+
+  const getResourceIcon = (type: string) => {
+    switch (type) {
+      case 'table': return <Table className="w-5 h-5 text-primary-500" />;
+      case 'file': return <FileText className="w-5 h-5 text-green-500" />;
+      case 'directory':
+      case 'folder':
+      case 'container': return <Folder className="w-5 h-5 text-yellow-500" />;
+      default: return <FileJson className="w-5 h-5 text-gray-500" />;
     }
   };
 
@@ -187,13 +220,12 @@ export default function NewValidation() {
         return (
           <div key={s.id} className="flex items-center">
             <div
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
-                isActive
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${isActive
                   ? 'bg-primary-100 text-primary-700'
                   : isCompleted
-                  ? 'text-success-600'
-                  : 'text-gray-400'
-              }`}
+                    ? 'text-success-600'
+                    : 'text-gray-400'
+                }`}
             >
               <s.icon className="w-5 h-5" />
               <span className="font-medium">{s.label}</span>
@@ -213,17 +245,17 @@ export default function NewValidation() {
       </div>
 
       <div className="grid grid-cols-2 gap-4">
-        {/* Local Test Database */}
+        {/* Built-in: Test Database */}
         <button
           onClick={() => {
             setSelectedDataSource('local-test');
+            setSelectedResource(null);
             setStep('browse');
           }}
-          className={`p-6 rounded-xl border-2 text-left transition-all ${
-            selectedDataSource === 'local-test'
+          className={`p-6 rounded-xl border-2 text-left transition-all ${selectedDataSource === 'local-test'
               ? 'border-primary-500 bg-primary-50'
               : 'border-gray-200 hover:border-gray-300'
-          }`}
+            }`}
         >
           <div className="flex items-start space-x-4">
             <div className="p-3 bg-blue-100 rounded-lg">
@@ -242,17 +274,17 @@ export default function NewValidation() {
           </div>
         </button>
 
-        {/* File Upload */}
+        {/* Built-in: File Upload */}
         <button
           onClick={() => {
             setSelectedDataSource('file-upload');
+            setSelectedResource(null);
             setStep('browse');
           }}
-          className={`p-6 rounded-xl border-2 text-left transition-all ${
-            selectedDataSource === 'file-upload'
+          className={`p-6 rounded-xl border-2 text-left transition-all ${selectedDataSource === 'file-upload'
               ? 'border-primary-500 bg-primary-50'
               : 'border-gray-200 hover:border-gray-300'
-          }`}
+            }`}
         >
           <div className="flex items-start space-x-4">
             <div className="p-3 bg-green-100 rounded-lg">
@@ -270,17 +302,17 @@ export default function NewValidation() {
           </div>
         </button>
 
-        {/* ADLS Gen2 */}
+        {/* Built-in: ADLS Gen2 Mock */}
         <button
           onClick={() => {
             setSelectedDataSource('adls-mock');
+            setSelectedResource(null);
             setStep('browse');
           }}
-          className={`p-6 rounded-xl border-2 text-left transition-all ${
-            selectedDataSource === 'adls-mock'
+          className={`p-6 rounded-xl border-2 text-left transition-all ${selectedDataSource === 'adls-mock'
               ? 'border-primary-500 bg-primary-50'
               : 'border-gray-200 hover:border-gray-300'
-          }`}
+            }`}
         >
           <div className="flex items-start space-x-4">
             <div className="p-3 bg-purple-100 rounded-lg">
@@ -299,41 +331,70 @@ export default function NewValidation() {
           </div>
         </button>
 
-        {/* Connected Data Sources */}
-        {dataSources?.map((ds) => (
-          <button
-            key={ds.id}
-            onClick={() => {
-              setSelectedDataSource(ds.id);
-              setStep('browse');
-            }}
-            className={`p-6 rounded-xl border-2 text-left transition-all ${
-              selectedDataSource === ds.id
-                ? 'border-primary-500 bg-primary-50'
-                : 'border-gray-200 hover:border-gray-300'
+        {/* Built-in: Local Test Files */}
+        <button
+          onClick={() => {
+            setSelectedDataSource('local-files');
+            setSelectedResource(null);
+            setStep('browse');
+          }}
+          className={`p-6 rounded-xl border-2 text-left transition-all ${selectedDataSource === 'local-files'
+              ? 'border-primary-500 bg-primary-50'
+              : 'border-gray-200 hover:border-gray-300'
             }`}
-          >
-            <div className="flex items-start space-x-4">
-              <div className="p-3 bg-gray-100 rounded-lg">
-                <Database className="w-6 h-6 text-gray-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-gray-900">{ds.name}</h3>
-                <p className="text-sm text-gray-500 mt-1">{ds.source_type}</p>
-                <div className="flex items-center space-x-2 mt-3">
-                  <span
-                    className={`w-2 h-2 rounded-full ${
-                      ds.is_active ? 'bg-green-500' : 'bg-gray-400'
-                    }`}
-                  />
-                  <span className="text-sm text-gray-600">
-                    {ds.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                </div>
+        >
+          <div className="flex items-start space-x-4">
+            <div className="p-3 bg-orange-100 rounded-lg">
+              <Folder className="w-6 h-6 text-orange-600" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">Local Test Files</h3>
+              <p className="text-sm text-gray-500 mt-1">
+                Structured, semi-structured &amp; unstructured test data
+              </p>
+              <div className="flex items-center space-x-4 mt-3 text-sm text-gray-600">
+                <span>CSV, JSON, XML</span>
               </div>
             </div>
-          </button>
-        ))}
+          </div>
+        </button>
+
+        {/* User-connected Data Sources (from API) */}
+        {dataSources
+          ?.filter((ds) => !Object.keys(SOURCE_INFO).includes(ds.id))
+          .map((ds) => (
+            <button
+              key={ds.id}
+              onClick={() => {
+                setSelectedDataSource(ds.id);
+                setSelectedResource(null);
+                setStep('browse');
+              }}
+              className={`p-6 rounded-xl border-2 text-left transition-all ${selectedDataSource === ds.id
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-gray-200 hover:border-gray-300'
+                }`}
+            >
+              <div className="flex items-start space-x-4">
+                <div className="p-3 bg-gray-100 rounded-lg">
+                  <Database className="w-6 h-6 text-gray-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">{ds.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{ds.source_type}</p>
+                  <div className="flex items-center space-x-2 mt-3">
+                    <span
+                      className={`w-2 h-2 rounded-full ${ds.is_active ? 'bg-green-500' : 'bg-gray-400'
+                        }`}
+                    />
+                    <span className="text-sm text-gray-600">
+                      {ds.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
       </div>
     </div>
   );
@@ -345,53 +406,137 @@ export default function NewValidation() {
           <h2 className="text-xl font-semibold text-gray-900">Browse Resources</h2>
           <p className="text-gray-500 mt-1">Select a table or file to validate</p>
         </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search tables, columns..."
-            className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+        <div className="flex items-center space-x-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search..."
+              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-primary-500 focus:border-primary-500"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <button
+            onClick={loadResources}
+            className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-5 h-5 text-gray-400 ${resourcesLoading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
       </div>
 
+      {/* File Upload Section (only for file-upload source) */}
+      {selectedDataSource === 'file-upload' && (
+        <div className="bg-green-50 border-2 border-dashed border-green-300 rounded-xl p-6">
+          <div className="text-center">
+            <Upload className="w-10 h-10 text-green-500 mx-auto mb-3" />
+            <p className="font-medium text-gray-900 mb-1">Upload a File</p>
+            <p className="text-sm text-gray-500 mb-4">CSV, Excel, Parquet, or JSON (max 100MB)</p>
+            <div className="flex items-center justify-center space-x-3">
+              <input
+                type="file"
+                accept=".csv,.xlsx,.xls,.parquet,.json,.jsonl"
+                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                className="text-sm"
+              />
+              {uploadFile && (
+                <button
+                  onClick={handleFileUpload}
+                  disabled={uploading}
+                  className="btn-primary text-sm px-4 py-2 disabled:opacity-50"
+                >
+                  {uploading ? (
+                    <><RefreshCw className="w-4 h-4 mr-1 inline animate-spin" /> Uploading...</>
+                  ) : (
+                    <><Upload className="w-4 h-4 mr-1 inline" /> Upload</>
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Breadcrumb */}
       <div className="card overflow-hidden">
         <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
           <div className="flex items-center space-x-2 text-sm text-gray-600">
-            <Database className="w-4 h-4" />
-            <span>Test Database</span>
+            {getResourceIcon(selectedDataSource === 'local-test' ? 'table' : 'folder')}
+            <span>{getSourceLabel()}</span>
             <ChevronRight className="w-4 h-4" />
-            <span>Tables</span>
+            <span>{selectedDataSource === 'local-test' ? 'Tables' : 'Files'}</span>
           </div>
         </div>
 
+        {/* Loading State */}
+        {resourcesLoading && (
+          <div className="flex items-center justify-center p-8">
+            <RefreshCw className="w-6 h-6 text-primary-500 animate-spin mr-3" />
+            <span className="text-gray-500">Loading resources...</span>
+          </div>
+        )}
+
+        {/* Empty State */}
+        {!resourcesLoading && filteredResources.length === 0 && (
+          <div className="text-center p-8 text-gray-500">
+            <Folder className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+            <p className="font-medium">No resources found</p>
+            <p className="text-sm mt-1">
+              {selectedDataSource === 'file-upload'
+                ? 'Upload a file to get started'
+                : 'No tables or files found in this data source'}
+            </p>
+          </div>
+        )}
+
+        {/* Resource List */}
         <div className="divide-y divide-gray-200 max-h-96 overflow-y-auto">
           {filteredResources.map((resource) => (
             <div key={resource.path}>
               <div
                 onClick={() => {
+                  if (resource.type === 'directory' || resource.type === 'folder') {
+                    toggleExpand(resource.path);
+                    return;
+                  }
                   if (resource.columns) {
                     toggleExpand(resource.path);
                   }
                   setSelectedResource(resource);
                 }}
-                className={`flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 ${
-                  selectedResource?.path === resource.path ? 'bg-primary-50' : ''
-                }`}
+                className={`flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50 ${selectedResource?.path === resource.path ? 'bg-primary-50' : ''
+                  }`}
               >
                 <div className="flex items-center space-x-3">
-                  <Table className="w-5 h-5 text-primary-500" />
+                  {getResourceIcon(resource.type)}
                   <div>
                     <span className="font-medium text-gray-900">{resource.name}</span>
                     <span className="text-sm text-gray-500 ml-3">
-                      {resource.rowCount?.toLocaleString()} rows
-                      {resource.columnCount && `, ${resource.columnCount} cols`}
+                      {resource.rowCount != null && `${resource.rowCount.toLocaleString()} rows`}
+                      {resource.columnCount != null && `, ${resource.columnCount} cols`}
+                      {resource.size && ` • ${resource.size}`}
+                      {resource.format && ` • ${resource.format.toUpperCase()}`}
                     </span>
                   </div>
                 </div>
                 <div className="flex items-center space-x-3">
+                  {/* Preview button */}
+                  {resource.type !== 'directory' && resource.type !== 'folder' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedResource(resource);
+                        loadPreview(resource);
+                        setShowPreview(true);
+                      }}
+                      className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-primary-600"
+                      title="Preview data"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                  )}
                   {resource.columns && (
                     <button
                       onClick={(e) => {
@@ -452,6 +597,57 @@ export default function NewValidation() {
           <ChevronRight className="w-4 h-4 ml-2 inline" />
         </button>
       </div>
+
+      {/* Preview Modal */}
+      <Modal
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
+        title={`Preview: ${selectedResource?.name}`}
+        size="lg"
+      >
+        {previewLoading ? (
+          <div className="flex items-center justify-center p-8">
+            <RefreshCw className="w-6 h-6 text-primary-500 animate-spin mr-3" />
+            <span className="text-gray-500">Loading preview...</span>
+          </div>
+        ) : previewData ? (
+          <div>
+            <div className="mb-3 text-sm text-gray-500">
+              Showing {previewData.preview_count} of {previewData.total_rows.toLocaleString()} rows
+            </div>
+            <div className="overflow-x-auto max-h-96">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    {previewData.columns.map((col) => (
+                      <th
+                        key={col.name}
+                        className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase"
+                      >
+                        <div>{col.name}</div>
+                        <div className="text-gray-300 font-normal">{col.type}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {previewData.rows.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      {previewData.columns.map((col) => (
+                        <td key={col.name} className="px-4 py-2 text-sm text-gray-600 whitespace-nowrap max-w-xs truncate">
+                          {row[col.name] != null ? String(row[col.name]) : <span className="text-gray-300 italic">null</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="text-center p-8 text-gray-500">No preview available</div>
+        )}
+      </Modal>
     </div>
   );
 
@@ -466,20 +662,27 @@ export default function NewValidation() {
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <Table className="w-5 h-5 text-blue-600" />
+            {getResourceIcon(selectedResource?.type || 'table')}
             <div>
               <p className="font-medium text-blue-900">{selectedResource?.name}</p>
               <p className="text-sm text-blue-700">
-                {selectedResource?.rowCount?.toLocaleString()} rows,{' '}
-                {selectedResource?.columnCount} columns
+                {selectedResource?.rowCount != null && `${selectedResource.rowCount.toLocaleString()} rows`}
+                {selectedResource?.columnCount != null && `, ${selectedResource.columnCount} columns`}
+                {selectedResource?.size && ` • ${selectedResource.size}`}
               </p>
             </div>
           </div>
           <button
-            onClick={() => setShowPreview(true)}
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            onClick={() => {
+              if (selectedResource) {
+                loadPreview(selectedResource);
+                setShowPreview(true);
+              }
+            }}
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center space-x-1"
           >
-            Preview Data
+            <Eye className="w-4 h-4" />
+            <span>Preview Data</span>
           </button>
         </div>
       </div>
@@ -491,11 +694,10 @@ export default function NewValidation() {
           {VALIDATION_MODES.map((mode) => (
             <label
               key={mode.id}
-              className={`flex items-start p-4 border-2 rounded-xl cursor-pointer transition-all ${
-                validationMode === mode.id
+              className={`flex items-start p-4 border-2 rounded-xl cursor-pointer transition-all ${validationMode === mode.id
                   ? 'border-primary-500 bg-primary-50'
                   : 'border-gray-200 hover:border-gray-300'
-              }`}
+                }`}
             >
               <input
                 type="radio"
@@ -508,9 +710,8 @@ export default function NewValidation() {
               <div className="ml-3 flex-1">
                 <div className="flex items-center space-x-2">
                   <mode.icon
-                    className={`w-5 h-5 ${
-                      validationMode === mode.id ? 'text-primary-600' : 'text-gray-400'
-                    }`}
+                    className={`w-5 h-5 ${validationMode === mode.id ? 'text-primary-600' : 'text-gray-400'
+                      }`}
                   />
                   <span className="font-medium text-gray-900">{mode.name}</span>
                 </div>
@@ -548,20 +749,18 @@ export default function NewValidation() {
           <div>
             <p className="text-sm font-medium text-gray-900">AI Model</p>
             <p className="text-sm text-gray-500">
-              {llmHealth?.provider} ({llmHealth?.model})
+              {llmHealth?.provider || 'Unknown'} ({llmHealth?.model || 'N/A'})
             </p>
           </div>
         </div>
         <div className="flex items-center space-x-2">
           <div
-            className={`w-2 h-2 rounded-full ${
-              llmHealth?.status === 'healthy' ? 'bg-green-500' : 'bg-red-500'
-            }`}
+            className={`w-2 h-2 rounded-full ${llmHealth?.status === 'healthy' ? 'bg-green-500' : 'bg-red-500'
+              }`}
           />
           <span
-            className={`text-sm ${
-              llmHealth?.status === 'healthy' ? 'text-green-600' : 'text-red-600'
-            }`}
+            className={`text-sm ${llmHealth?.status === 'healthy' ? 'text-green-600' : 'text-red-600'
+              }`}
           >
             {llmHealth?.status === 'healthy' ? 'Connected' : 'Disconnected'}
           </span>
@@ -586,38 +785,42 @@ export default function NewValidation() {
         title={`Preview: ${selectedResource?.name}`}
         size="lg"
       >
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                {selectedResource?.columns?.map((col) => (
-                  <th
-                    key={col.name}
-                    className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase"
-                  >
-                    {col.name}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {[1, 2, 3, 4, 5].map((row) => (
-                <tr key={row}>
-                  {selectedResource?.columns?.map((col) => (
-                    <td key={col.name} className="px-4 py-2 text-sm text-gray-600">
-                      {col.name === 'customer_id' && row}
-                      {col.name === 'email' && `user${row}@example.com`}
-                      {col.name === 'first_name' && ['John', 'Jane', 'Bob', 'Alice', 'Charlie'][row - 1]}
-                      {col.name === 'last_name' && ['Smith', 'Doe', 'Johnson', 'Williams', 'Brown'][row - 1]}
-                      {col.name === 'phone' && `+1-555-000${row}`}
-                      {col.name === 'status' && ['active', 'active', 'inactive', 'active', 'suspended'][row - 1]}
-                    </td>
+        {previewLoading ? (
+          <div className="flex items-center justify-center p-8">
+            <RefreshCw className="w-6 h-6 text-primary-500 animate-spin mr-3" />
+            <span className="text-gray-500">Loading preview...</span>
+          </div>
+        ) : previewData ? (
+          <div className="overflow-x-auto max-h-96">
+            <div className="mb-3 text-sm text-gray-500">
+              Showing {previewData.preview_count} of {previewData.total_rows.toLocaleString()} rows
+            </div>
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr>
+                  {previewData.columns.map((col) => (
+                    <th key={col.name} className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                      {col.name}
+                    </th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {previewData.rows.map((row, idx) => (
+                  <tr key={idx}>
+                    {previewData.columns.map((col) => (
+                      <td key={col.name} className="px-4 py-2 text-sm text-gray-600">
+                        {row[col.name] != null ? String(row[col.name]) : '—'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="text-center p-8 text-gray-500">No preview available</div>
+        )}
       </Modal>
     </div>
   );
@@ -633,7 +836,21 @@ export default function NewValidation() {
         <div className="p-4 flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-500">Data Source</p>
+            <p className="font-medium text-gray-900">{getSourceLabel()}</p>
+          </div>
+          <button
+            onClick={() => setStep('source')}
+            className="text-sm text-primary-600 hover:text-primary-700"
+          >
+            Change
+          </button>
+        </div>
+
+        <div className="p-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-500">Resource</p>
             <p className="font-medium text-gray-900">{selectedResource?.name}</p>
+            <p className="text-xs text-gray-400">{selectedResource?.path}</p>
           </div>
           <button
             onClick={() => setStep('browse')}
@@ -675,7 +892,7 @@ export default function NewValidation() {
           <div>
             <p className="text-sm text-gray-500">AI Model</p>
             <p className="font-medium text-gray-900">
-              {llmHealth?.provider} ({llmHealth?.model})
+              {llmHealth?.provider || 'Unknown'} ({llmHealth?.model || 'N/A'})
             </p>
           </div>
         </div>
