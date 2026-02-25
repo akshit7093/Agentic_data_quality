@@ -1,0 +1,101 @@
+customer_id,first_name,last_name,email,phone,city,state,signup_date,is_active,total_spent
+C-00001,Grace,Johnson,user1@email.com,701-951-5982,Los Angeles,TX,2025-07-15,True,32.26
+C-00002,Frank,Jones,user2@email.com,219-393-9325,New York,NY,2025-09-19,True,156.67
+C-00003,Grace,Williams,user3@email.com,875-689-9801,Philadelphia,TX,2025-11-12,True,118.73
+C-00004,Charlie,Johnson,user4@email.com,654-542-6533,Houston,CA,2025-10-02,False,82.33
+C-00005,Eve,Johnson,user5@email.com,344-386-7583,New York,CA,2025-07-05,True,99.54
+C-00006,Charlie,Brown,user6@email.com,212-702-8568,Los Angeles,AZ,2025-08-03,True,221.24
+C-00007,Grace,Jones,user7@email.com,554-619-7309,Philadelphia,NY,2025-02-09,True,15.3
+C-00008,Bob,Garcia,user8@email.com,840-580-8087,New York,NY,2026-01-15,True,72.46
+C-00009,Diana,Johnson,user9@email.com,726-161-9553,Phoenix,CA,2025-10-28,False,387.75
+C-00010,Charlie,Smith,,422-503-4078,Los Angeles,AZ,2025-02-11,False,32.1
+C-00011,Diana,Smith,user11@email.com,783-945-3289,Phoenix,NY,2025-11-22,True,6.97
+C-00012,Bob,Brown,user12@email.com,424-663-4937,Chicago,NY,2025-06-01,True,116.44
+C-00013,Grace,Johnson,user13@email.com,304-738-8294,Phoenix,TX,2025-05-30,True,173.41
+C-00014,Bob,Miller,user14@email.com,365-725-5610,Chicago,IL,2025-02-22,True,36.96
+C-00015,Alice,Brown,user15@email.com,566-338-1672,Los Angeles,AZ,INVALID_DATE,True,26.53
+C-00016,Bob,Brown,user16@email.com,577-388-5867,New York,PA,2025-11-30,True,13.22
+C-00017,Grace,Brown,user17@email.com,419-347-5976,Los Angeles,CA,2025-06-01,True,37.02
+C-00018,Henry,Garcia,user18@email.com,311-633-3747,Houston,IL,2025-05-25,True,14.41
+C-00019,Bob,Johnson,user19@email.com,270-836-7733,Los Angeles,TX,2025-05-03,False,95.26
+C-00020,Alice,Johnson,user20@email.com,416-323-1016,Los Angeles,CA,2025-04-25,False,156.17
+C-00021,Grace,Williams,user21@email.com,335-393-4839,Philadelphia,CA,2026-01-01,True,11.83
+C-00022,Alice,Brown,user22@email.com,940-988-8454,Houston,TX,2025-07-28,True,257.5
+C-00023,Henry,Brown,user23@email.com,313-498-8864,Houston,PA,2025-02-25,False,767.22
+C-00024,Bob,Brown,user24@email.com,996-677-6397,Philadelphia,PA,2025-10-11,False,792.18
+C-00025,Diana,Brown,user25@email.com,740-108-5904,Los Angeles,NY,2025-07-13,True,19.29
+C-00026,Grace,Smith,user26@email.com,960-707-8790,Philadelphia,PA,2025-02-03,True,95.05
+C-00027,Frank,Miller,user27@email.com,481-787-8391,Houston,NY,2025-03-06,True,15.13
+C-00028,Eve,Miller,user28@email.com,497-333-2100,Philadelphia,IL,2025-04-21,False,131.44
+C-00029,Alice,Johnson,user29@email.com,715-969-3751,Philadelphia,PA,2026-01-19,True,534.49
+C-00030,Alice,Miller,user30@email.com,650-830-9423,Los Angeles,AZ,2025-05-11,True,66.45
+C-00031,Eve,Miller,user31@email.com,869-301-2326,Los Angeles,NY,2025-11-08,False,52.12
+C-00032,Bob,Brown,,249-477-3557,Houston,AZ,2025-01-22,True,106.34
+C-00033,Henry,Johnson,,,Chicago,CA,2026-01-23,True,259.31
+C-00034,Diana,Miller,user34@email.com,945-447-4306,Houston,TX,2025-04-10,True,92.73
+C-00035,Charlie,Jones,user35@email.com,305-595-4665,New York,IL,2025-08-19,True,62.86
+C-00036,Eve,Miller,user36@email.com,693-752-9986,Chicago,NY,2025-04-28,True,212.69
+C-00037,Henry,Brown,,773-395-4892,New York,IL,2025-09-25,True,60.11
+C-00038,Charlie,Miller,user38@email.com,326-364-3046,Houston,AZ,2025-10-20,False,1664.16
+C-00039,Eve,Johnson,user39@email.com,380-871-4367,Houston,PA,2025-08-28,True,103.33
+C-00040,Henry,Garcia,,,Los Angeles,PA,2025-02-10,True,331.42
+C-00041,Alice,Miller,,399-938-7173,New York,TX,2025-02-27,True,149.57
+C-00042,Frank,Williams,user42@email.com,,Houston,AZ,2025-03-04,True,427.7
+C-00043,Alice,Brown,user43@email.com,352-132-9700,Houston,IL,2025-11-23,True,1037.01
+C-00044,Henry,Jones,user44@email.com,634-723-3483,Houston,CA,2026-01-24,True,20.12
+C-00045,Bob,Brown,user45@email.com,825-684-5321,Philadelphia,PA,2025-04-01,True,43.95
+C-00046,Diana,Johnson,user46@email.com,223-630-4132,New York,CA,2025-12-11,False,48.09
+C-00047,Eve,Garcia,user47@email.com,835-568-6016,Houston,AZ,2025-01-17,True,1779.94
+C-00048,Eve,Smith,user48@email.com,353-226-3023,Phoenix,TX,2026-01-10,True,138.38
+C-00049,Eve,Garcia,user49@email.com,271-600-9285,Phoenix,AZ,2025-10-09,True,6309.28
+C-00050,Grace,Smith,user50@email.com,448-584-5496,Houston,NY,2025-06-26,True,48.71
+C-00051,Bob,Garcia,user51@email.com,391-513-8722,Chicago,TX,2025-04-03,False,238.83
+C-00052,Frank,Miller,user52@email.com,318-359-1545,Philadelphia,TX,2025-11-12,True,161.32
+C-00053,Grace,Miller,user53@email.com,,New York,AZ,2025-01-27,True,26.01
+C-00054,Grace,Brown,user54@email.com,468-974-1538,Philadelphia,TX,2025-03-22,True,458.11
+C-00055,Diana,Smith,user55@email.com,453-755-2258,Philadelphia,CA,2025-05-05,True,5.2
+C-00056,Charlie,Johnson,user56@email.com,559-843-4561,Los Angeles,IL,2025-02-07,True,36.65
+C-00057,Bob,Garcia,,,Philadelphia,CA,2025-12-02,True,339.24
+C-00058,Eve,Johnson,user58@email.com,925-825-5104,Chicago,TX,2026-01-28,True,366.58
+C-00059,Alice,Smith,user59@email.com,957-501-8958,Phoenix,IL,2025-10-15,False,5753.97
+C-00060,Diana,Brown,user60@email.com,294-989-9980,New York,NY,2025-09-14,True,420.62
+C-00061,Charlie,Garcia,user61@email.com,260-894-3495,Los Angeles,AZ,2025-01-09,True,1958.63
+C-00062,Frank,Johnson,user62@email.com,630-874-5501,Phoenix,PA,2025-11-02,True,28.83
+C-00063,Alice,Brown,user63@email.com,902-384-2602,Houston,TX,2025-08-24,True,261.58
+C-00064,Diana,Jones,,616-705-7703,Houston,AZ,2025-08-20,True,497.65
+C-00065,Charlie,Miller,user65@email.com,,Los Angeles,PA,2025-08-31,True,858.26
+C-00066,Charlie,Garcia,user66@email.com,,New York,IL,2025-12-31,True,1051.96
+C-00067,Charlie,Miller,user67@email.com,414-281-2558,Los Angeles,AZ,2025-05-14,True,43.61
+C-00068,Grace,Jones,user68@email.com,615-464-3080,Los Angeles,PA,2025-06-14,True,210.21
+C-00069,Frank,Johnson,user69@email.com,280-681-7884,Chicago,TX,2025-05-06,True,63.06
+C-00070,Charlie,Jones,user70@email.com,313-237-4943,Houston,TX,2025-10-22,False,6288.0
+C-00071,Eve,Miller,user71@email.com,,Houston,CA,2025-05-12,False,1115.81
+C-00072,Henry,Jones,,732-865-9479,Phoenix,AZ,2025-07-21,False,15.44
+C-00073,Diana,Brown,user73@email.com,,Chicago,AZ,2026-01-29,True,23.82
+C-00074,Diana,Jones,user74@email.com,,Houston,CA,2025-04-23,True,29.36
+C-00075,Frank,Brown,user75@email.com,476-134-6373,Chicago,CA,2025-12-21,True,508.3
+C-00076,Eve,Miller,user76@email.com,735-449-1329,New York,PA,2025-01-08,True,490.47
+C-00077,Grace,Smith,user77@email.com,836-862-1389,Chicago,AZ,2025-01-23,True,66.1
+C-00078,Eve,Miller,user78@email.com,417-606-2507,Houston,IL,2025-04-23,True,231.3
+C-00079,Grace,Garcia,user79@email.com,752-551-3741,Philadelphia,IL,2025-09-01,True,9962.73
+C-00080,Frank,Jones,user80@email.com,,Los Angeles,NY,2025-11-23,True,481.34
+C-00081,Diana,Jones,user81@email.com,574-962-5309,New York,CA,2026-01-08,True,275.67
+C-00082,Charlie,Jones,user82@email.com,,Philadelphia,IL,2025-07-10,True,216.15
+C-00083,Alice,Jones,user83@email.com,670-138-8918,New York,TX,2025-03-07,False,30.62
+C-00084,Grace,Smith,user84@email.com,438-868-3793,Houston,TX,2025-10-21,True,8.18
+C-00085,Grace,Smith,user85@email.com,,Philadelphia,CA,2025-05-28,True,540.48
+C-00086,Henry,Johnson,user86@email.com,315-193-7775,Chicago,PA,2025-06-07,True,-50.0
+C-00087,Eve,Smith,user87@email.com,665-843-8938,Philadelphia,TX,INVALID_DATE,False,-50.0
+C-00088,Henry,Smith,user88@email.com,,Los Angeles,NY,2025-08-05,True,469.44
+C-00089,Diana,Jones,user89@email.com,264-182-3341,Houston,TX,2025-01-10,True,68.12
+C-00090,Grace,Williams,user90@email.com,246-354-6641,New York,PA,2025-07-07,True,70.08
+C-00091,Henry,Williams,user91@email.com,332-441-9737,New York,NY,2025-03-22,False,86.75
+C-00092,Bob,Garcia,user92@email.com,432-979-6895,New York,AZ,2026-01-28,True,732.34
+C-00093,Diana,Garcia,user93@email.com,878-918-5885,New York,TX,2025-12-29,True,49.43
+C-00094,Charlie,Smith,user94@email.com,862-532-5851,New York,TX,2025-11-10,False,39.96
+C-00095,Frank,Miller,user95@email.com,739-966-8452,Chicago,IL,2025-03-29,True,245.02
+C-00096,Henry,Miller,user96@email.com,909-852-9013,Los Angeles,AZ,2026-02-04,True,61.91
+C-00097,Bob,Johnson,user97@email.com,709-721-1430,Chicago,CA,2025-04-20,False,200.11
+C-00098,Charlie,Miller,,841-465-4135,Philadelphia,CA,2025-09-25,False,320.13
+C-00099,Eve,Miller,user99@email.com,294-337-7670,Los Angeles,NY,2025-09-02,True,80.11
+C-00100,Alice,Smith,user100@email.com,,Chicago,TX,2025-12-29,True,350.29

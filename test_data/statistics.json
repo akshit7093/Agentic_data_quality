@@ -1,0 +1,209 @@
+{
+  "tables": {
+    "customers": {
+      "row_count": 1000,
+      "columns": [
+        {
+          "name": "customer_id",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "email",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "first_name",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "last_name",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "phone",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "date_of_birth",
+          "type": "DATE",
+          "nullable": true
+        },
+        {
+          "name": "country",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": true
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "lifetime_value",
+          "type": "REAL",
+          "nullable": true
+        }
+      ]
+    },
+    "orders": {
+      "row_count": 5000,
+      "columns": [
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "customer_id",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "product_id",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "quantity",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "unit_price",
+          "type": "REAL",
+          "nullable": true
+        },
+        {
+          "name": "total_amount",
+          "type": "REAL",
+          "nullable": true
+        },
+        {
+          "name": "order_date",
+          "type": "TIMESTAMP",
+          "nullable": true
+        },
+        {
+          "name": "shipping_address",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "status",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "discount_code",
+          "type": "TEXT",
+          "nullable": true
+        }
+      ]
+    },
+    "products": {
+      "row_count": 200,
+      "columns": [
+        {
+          "name": "product_id",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "product_name",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "category",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "price",
+          "type": "REAL",
+          "nullable": true
+        },
+        {
+          "name": "cost",
+          "type": "REAL",
+          "nullable": true
+        },
+        {
+          "name": "stock_quantity",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "supplier_id",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "type": "TIMESTAMP",
+          "nullable": true
+        },
+        {
+          "name": "is_active",
+          "type": "BOOLEAN",
+          "nullable": true
+        }
+      ]
+    },
+    "sales_transactions": {
+      "row_count": 10000,
+      "columns": [
+        {
+          "name": "transaction_id",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "order_id",
+          "type": "INTEGER",
+          "nullable": true
+        },
+        {
+          "name": "payment_method",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "payment_status",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "transaction_amount",
+          "type": "REAL",
+          "nullable": true
+        },
+        {
+          "name": "transaction_date",
+          "type": "TIMESTAMP",
+          "nullable": true
+        },
+        {
+          "name": "currency",
+          "type": "TEXT",
+          "nullable": true
+        },
+        {
+          "name": "fraud_score",
+          "type": "REAL",
+          "nullable": true
+        }
+      ]
+    }
+  }
+}

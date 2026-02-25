@@ -1,0 +1,61 @@
+product_id,product_name,category,brand,price,cost,stock_quantity,rating,review_count,is_available
+PROD-0061,Product 61,Sports,Generic,-10.0,189.97,993,1.9,144,True
+PROD-0062,Product 62,Clothing,BrandB,782.05,68.36,195,2.8,354,True
+PROD-0063,Product 63,Electronics,Generic,220.04,370.01,592,6.0,251,True
+PROD-0064,Product 64,Clothing,Generic,362.98,143.22,189,4.4,404,True
+PROD-0065,Product 65,Electronics,BrandB,933.9,94.68,937,3.5,198,True
+PROD-0066,Product 66,Sports,BrandC,249.58,14.46,812,3.2,270,True
+PROD-0067,Product 67,Sports,Generic,127.68,428.55,127,1.2,75,True
+PROD-0068,Product 68,Sports,BrandB,486.0,239.9,383,1.4,162,True
+PROD-0069,Product 69,Electronics,BrandC,246.43,137.23,522,1.9,90,True
+PROD-0070,Product 70,Home & Garden,BrandD,160.96,247.84,584,4.1,335,True
+PROD-0071,Product 71,Books,BrandB,333.56,63.7,440,1.3,39,True
+PROD-0072,Product 72,Electronics,BrandC,494.74,11.45,607,4.1,72,True
+PROD-0073,Product 73,Clothing,BrandD,11.23,402.08,590,4.3,6,True
+PROD-0074,Product 74,Electronics,BrandB,71.26,269.22,960,3.0,229,True
+PROD-0075,Product 75,Sports,BrandB,181.54,81.96,47,4.8,41,True
+PROD-0076,Product 76,Home & Garden,BrandB,75.28,233.58,30,3.4,428,True
+PROD-0077,Product 77,Sports,Generic,143.88,82.28,507,4.9,425,True
+PROD-0078,Product 78,Home & Garden,BrandA,745.64,200.48,54,4.0,342,True
+PROD-0079,Product 79,Clothing,BrandD,511.63,140.27,219,1.2,388,True
+PROD-0080,Product 80,Electronics,Generic,309.62,342.39,580,2.2,161,True
+PROD-0081,Product 81,Electronics,BrandB,433.76,238.11,551,4.7,101,True
+PROD-0082,Product 82,Sports,BrandB,574.09,57.25,929,3.1,52,True
+PROD-0083,Product 83,Home & Garden,BrandD,742.27,170.46,541,1.8,183,True
+PROD-0084,Product 84,Electronics,Generic,967.31,356.81,797,4.1,388,True
+PROD-0085,Product 85,Sports,Generic,994.86,41.38,981,4.6,162,True
+PROD-0086,Product 86,Home & Garden,BrandC,55.85,148.51,992,1.3,26,True
+PROD-0087,Product 87,Books,BrandA,713.34,77.95,3,1.7,458,True
+PROD-0088,Product 88,Sports,BrandD,59.13,456.5,403,3.6,322,True
+PROD-0089,Product 89,Electronics,BrandD,351.52,178.86,523,4.1,129,True
+PROD-0090,Product 90,Books,BrandB,688.11,238.89,736,2.0,300,True
+PROD-0091,Product 91,Home & Garden,BrandA,302.5,183.99,520,3.7,106,True
+PROD-0092,Product 92,Clothing,BrandA,772.85,138.25,645,2.6,354,True
+PROD-0093,Product 93,Clothing,BrandB,754.33,477.68,385,6.0,241,False
+PROD-0094,Product 94,Books,BrandD,691.87,392.5,879,3.9,41,True
+PROD-0095,Product 95,Home & Garden,Generic,193.93,50.55,383,2.2,470,True
+PROD-0096,Product 96,Sports,BrandC,401.54,352.38,161,2.5,103,True
+PROD-0097,Product 97,Books,BrandB,687.5,222.41,238,2.6,277,True
+PROD-0098,Product 98,Electronics,Generic,948.44,122.58,977,4.3,443,True
+PROD-0099,Product 99,Clothing,BrandB,601.78,423.56,204,4.8,58,True
+PROD-0100,Product 100,Electronics,Generic,177.65,449.77,435,3.3,470,True
+PROD-0101,Product 101,Clothing,BrandC,199.13,423.21,292,3.0,414,True
+PROD-0102,Product 102,Clothing,Generic,109.18,482.25,967,4.5,231,False
+PROD-0103,Product 103,Clothing,BrandB,379.82,380.37,840,3.3,493,True
+PROD-0104,Product 104,Food,BrandB,982.53,276.96,77,1.3,129,True
+PROD-0105,Product 105,Clothing,BrandB,810.49,70.82,608,3.3,1,True
+PROD-0106,Product 106,Sports,BrandB,217.38,310.91,525,2.0,391,True
+PROD-0107,Product 107,Electronics,BrandB,630.76,7.24,242,3.7,391,False
+PROD-0108,Product 108,Books,Generic,432.76,254.15,391,4.7,31,False
+PROD-0109,Product 109,Books,BrandD,520.21,476.23,992,1.8,396,False
+PROD-0110,Product 110,Home & Garden,BrandA,440.05,357.28,701,2.4,260,True
+PROD-0111,Product 111,Home & Garden,BrandA,955.15,254.68,444,3.1,164,False
+PROD-0112,Product 112,Sports,BrandD,13.29,102.52,357,3.6,101,True
+PROD-0113,Product 113,Sports,BrandA,367.78,318.46,587,2.6,292,False
+PROD-0114,Product 114,Food,BrandC,-10.0,323.95,841,4.7,184,True
+PROD-0115,Product 115,Food,BrandA,5.27,248.53,583,1.7,315,True
+PROD-0116,Product 116,Electronics,BrandB,680.0,212.37,874,2.6,36,True
+PROD-0117,Product 117,Sports,BrandB,14.44,18.24,147,3.7,9,True
+PROD-0118,Product 118,Clothing,BrandD,731.72,490.81,458,4.1,415,True
+PROD-0119,Product 119,Electronics,BrandD,522.21,127.52,783,3.8,375,True
+PROD-0120,Product 120,Electronics,BrandA,154.97,53.39,95,2.8,477,True

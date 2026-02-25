@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Quality Report - customers</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f3f2f1;
+            color: #323130;
+        }
+        .header {
+            background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
+            color: white;
+            padding: 20px 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header h1 { font-size: 24px; font-weight: 600; }
+        .header .subtitle { font-size: 14px; opacity: 0.9; margin-top: 5px; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .kpi-card {
+            background: white;
+            border-radius: 4px;
+            padding: 20px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .kpi-card .label { font-size: 12px; color: #605e5c; text-transform: uppercase; }
+        .kpi-card .value { 
+            font-size: 32px; 
+            font-weight: 600; 
+            margin-top: 5px;
+            color: #a80000;
+        }
+        .kpi-card .trend { font-size: 12px; margin-top: 5px; }
+        .section {
+            background: white;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        }
+        .section-header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #edebe9;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        .section-body { padding: 20px; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th {
+            text-align: left;
+            padding: 10px;
+            background: #f3f2f1;
+            font-weight: 600;
+            color: #323130;
+        }
+        td { padding: 10px; border-bottom: 1px solid #edebe9; }
+        tr:hover { background: #f3f2f1; }
+        .status-passed { color: #107c10; font-weight: 600; }
+        .status-failed { color: #a80000; font-weight: 600; }
+        .status-warning { color: #ffc107; font-weight: 600; }
+        .severity-critical { background: #fde7e9; color: #a80000; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+        .severity-warning { background: #fff4ce; color: #8a6d04; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+        .severity-info { background: #e6f2ff; color: #0078d4; padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+        .solution-card {
+            background: #f9f9f9;
+            border-left: 4px solid #0078d4;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 0 4px 4px 0;
+        }
+        .solution-card h4 { font-size: 14px; margin-bottom: 5px; }
+        .solution-card p { font-size: 12px; color: #605e5c; margin-bottom: 10px; }
+        .btn {
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 2px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s;
+        }
+        .btn-primary { background: #0078d4; color: white; }
+        .btn-primary:hover { background: #106ebe; }
+        .btn-secondary { background: #f3f2f1; color: #323130; border: 1px solid #8a8886; }
+        .btn-secondary:hover { background: #e1dfdd; }
+        .chart-container {
+            height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .donut-chart {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: conic-gradient(
+                #107c10 0deg 144.0deg,
+                #a80000 144.0deg 144.0deg,
+                #ffc107 144.0deg 360.0deg,
+                #edebe9 360.0deg 360deg
+            );
+            position: relative;
+        }
+        .donut-chart::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 120px;
+            height: 120px;
+            background: white;
+            border-radius: 50%;
+        }
+        .donut-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 1;
+        }
+        .donut-label .score { font-size: 36px; font-weight: 600; color: #a80000; }
+        .donut-label .label { font-size: 12px; color: #605e5c; }
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+        .filters {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        .filter-btn {
+            padding: 5px 12px;
+            border: 1px solid #8a8886;
+            background: white;
+            border-radius: 2px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .filter-btn.active { background: #0078d4; color: white; border-color: #0078d4; }
+        .metric-bar {
+            height: 8px;
+            background: #edebe9;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        .metric-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Data Quality Report</h1>
+        <div class="subtitle">
+            customers | Generated: 2026-02-26 00:13:47
+        </div>
+    </div>
+    
+    <div class="container">
+        <!-- KPI Cards -->
+        <div class="kpi-row">
+            <div class="kpi-card">
+                <div class="label">Overall Quality Score</div>
+                <div class="value">25.0%</div>
+                <div class="trend">Based on 5 validation rules</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Rules Passed</div>
+                <div class="value" style="color: #107c10;">2</div>
+                <div class="trend">40.0% success rate</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Rules Failed</div>
+                <div class="value" style="color: #a80000;">0</div>
+                <div class="trend">Requires attention</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Records Processed</div>
+                <div class="value" style="color: #0078d4;">1,000</div>
+                <div class="trend">Sample size: 1,000</div>
+            </div>
+        </div>
+        
+        <!-- Quality Overview Chart -->
+        <div class="section">
+            <div class="section-header">Quality Overview</div>
+            <div class="section-body">
+                <div class="chart-container">
+                    <div style="text-align: center;">
+                        <div class="donut-chart">
+                            <div class="donut-label">
+                                <div class="score">25</div>
+                                <div class="label">Quality Score</div>
+                            </div>
+                        </div>
+                        <div class="legend">
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #107c10;"></div>
+                                <span>Passed (2)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #a80000;"></div>
+                                <span>Failed (0)</span>
+                            </div>
+                            <div class="legend-item">
+                                <div class="legend-color" style="background: #ffc107;"></div>
+                                <span>Warnings (3)</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Validation Results Table -->
+        <div class="section">
+            <div class="section-header">Validation Results</div>
+            <div class="section-body">
+                <div class="filters">
+                    <button class="filter-btn active">All</button>
+                    <button class="filter-btn">Critical</button>
+                    <button class="filter-btn">Failed</button>
+                    <button class="filter-btn">Warnings</button>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rule</th>
+                            <th>Type</th>
+                            <th>Severity</th>
+                            <th>Status</th>
+                            <th>Failed Records</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        
+                <tr>
+                    <td><strong>email_format</strong></td>
+                    <td>pattern</td>
+                    <td><span class="severity-warning">WARNING</span></td>
+                    <td class="status-warning">WARNING</td>
+                    <td>239 (23.9%)</td>
+                    <td><button class="btn btn-secondary" onclick="alert('View details for email_format')">View</button></td>
+                </tr>
+            
+                <tr>
+                    <td><strong>phone_format</strong></td>
+                    <td>pattern</td>
+                    <td><span class="severity-warning">WARNING</span></td>
+                    <td class="status-warning">WARNING</td>
+                    <td>1,000 (100.0%)</td>
+                    <td><button class="btn btn-secondary" onclick="alert('View details for phone_format')">View</button></td>
+                </tr>
+            
+                <tr>
+                    <td><strong>dob_validity</strong></td>
+                    <td>statistical</td>
+                    <td><span class="severity-warning">WARNING</span></td>
+                    <td class="status-warning">WARNING</td>
+                    <td>34 (3.4%)</td>
+                    <td><button class="btn btn-secondary" onclick="alert('View details for dob_validity')">View</button></td>
+                </tr>
+            
+                <tr>
+                    <td><strong>duplicate_customer_id</strong></td>
+                    <td>row</td>
+                    <td><span class="severity-critical">CRITICAL</span></td>
+                    <td class="status-passed">PASSED</td>
+                    <td>0 (0.0%)</td>
+                    <td><button class="btn btn-secondary" onclick="alert('View details for duplicate_customer_id')">View</button></td>
+                </tr>
+            
+                <tr>
+                    <td><strong>status_active_check</strong></td>
+                    <td>pattern</td>
+                    <td><span class="severity-warning">WARNING</span></td>
+                    <td class="status-passed">PASSED</td>
+                    <td>0 (0.0%)</td>
+                    <td><button class="btn btn-secondary" onclick="alert('View details for status_active_check')">View</button></td>
+                </tr>
+            
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- AI Solutions -->
+        <div class="section">
+            <div class="section-header">🤖 AI-Recommended Solutions</div>
+            <div class="section-body">
+                
+                <div class="solution-card">
+                    <h4>AI Analysis & Recommendations</h4>
+                    <p>Here is my concise analysis of the provided customer data schema and sample data:
+
+What this data represents:
+The customers table contains records for individual customers, capturing key identifying information (customer_id), contact details (email, phone, date_of_birth, country), account status (status), lifetime value (lifetime_value), and timestamp of creation (created_at). It appears to be a database table storing customer profile data.
+
+Key quality concerns:
+1. Email addresses have high null percentage (4.7%) and low unique count relative to total rows (71.9%). This suggests many incomplete or invalid email records.
+2. Phone numbers also show significant nulls (3.0%) but relatively higher uniqueness compared to emails, indicating some valid phone data exists despite missing values for a substantial portion of customers.
+3. Lifetime_value spans an extremely wide range from negative to very high positive values (-994k to 866k). This indicates potential outliers or data entry issues that could skew analysis and require further investigation.
+
+Column relationships:
+- customer_id is the primary key, uniquely identifying each row/customer record.
+- email likely serves as a unique identifier for customers in practice, despite not being declared as such. 
+- date_of_birth provides age-related information but has no direct relationship to other columns.
+- country codes countries but doesn't link directly to other fields besides potentially enabling segmentation analysis.
+- status categorizes accounts (active/suspended/inactive) which could be used to filter or segment customers.
+- lifetime_value represents monetary value, likely tied to customer spending habits and could correlate with other metrics like purchase frequency.
+
+Potential business rules:
+1. Email validation: Implement stricter email format checks and possibly integrate an email verification service to reduce nulls and invalid addresses.
+2. Phone number standardization: Enforce a consistent phone number format (e.g., E.164) and consider validating against known country codes or carrier databases.
+3. Lifetime value normalization: Investigate the wide range of lifetime values, potentially capping outliers at reasonable business-defined thresholds to prevent skewing analytics.
+4. Status consistency checks: Ensure status values adhere to expected categories (active/suspended/inactive) through data validation rules.
+5. Birthday date format compliance: Verify that all dates_of_birth conform to a standard ISO 8601 format for reliable age calculations and reporting.
+
+Overall, while the schema captures essential customer profile information, there are notable quality issues with email and phone data completeness, as well as significant outliers in lifetime value that warrant attention through targeted data cleansing and validation processes.</p>
+                    <p><strong>Impact:</strong> Review AI recommendations for data quality improvements</p>
+                    <div style="margin-top: 10px;">
+                        
+                        <button class="btn btn-secondary" onclick="alert('View recommendation details')">View Details</button>
+                    </div>
+                </div>
+            
+            </div>
+        </div>
+        
+        <!-- Configuration Info -->
+        <div class="section">
+            <div class="section-header">Configuration</div>
+            <div class="section-body">
+                <table>
+                    <tr><td><strong>LLM Provider</strong></td><td>lmstudio</td></tr>
+                    <tr><td><strong>Model</strong></td><td>local-model</td></tr>
+                    <tr><td><strong>Data Source</strong></td><td>sqlite</td></tr>
+                    <tr><td><strong>Target</strong></td><td>customers</td></tr>
+                    <tr><td><strong>Validation Mode</strong></td><td>ai_recommended</td></tr>
+                    <tr><td><strong>Sample Size</strong></td><td>1,000</td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

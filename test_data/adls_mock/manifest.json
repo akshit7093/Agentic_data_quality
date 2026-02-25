@@ -1,0 +1,13 @@
+{
+  "storage_account": "testdatalake001",
+  "containers": [
+    "raw-data",
+    "processed-data",
+    "curated-data",
+    "archive"
+  ],
+  "total_files": 150,
+  "total_size_gb": 2.5,
+  "last_modified": "2026-02-12T17:07:37.252734",
+  "access_tier": "Hot"
+}

@@ -1,0 +1,262 @@
+"""SQLite database connector."""
+import logging
+from typing import Dict, Any, List, Optional
+import asyncio
+import os
+
+from sqlalchemy import create_engine, text, inspect, MetaData, Table
+from sqlalchemy.engine import Engine
+from sqlalchemy.pool import NullPool
+
+from app.connectors.base import BaseConnector
+
+logger = logging.getLogger(__name__)
+
+
+class SQLiteConnector(BaseConnector):
+    """Connector for SQLite databases."""
+
+    def __init__(self, connection_config: Dict[str, Any]):
+        super().__init__(connection_config)
+        self._engine: Optional[Engine] = None
+        self._dialect = 'sqlite'
+
+    def _build_connection_string(self) -> str:
+        """Build SQLAlchemy connection string."""
+        config = self.connection_config
+
+        if 'connection_string' in config:
+            return config['connection_string']
+
+        # Get database path from config
+        db_path = config.get('database', config.get('db_path', ''))
+        
+        # If no path provided, try to use default test database
+        if not db_path:
+            from pathlib import Path
+            test_data_dir = Path(__file__).parent.parent.parent.parent / "test_data"
+            db_path = str(test_data_dir / "test_database.db")
+        
+        # Ensure the path is absolute
+        if not os.path.isabs(db_path):
+            db_path = os.path.abspath(db_path)
+        
+        return f"sqlite:///{db_path}"
+
+    async def connect(self) -> bool:
+        """Establish database connection."""
+        try:
+            connection_string = self._build_connection_string()
+
+            # Create engine with connection pooling
+            self._engine = create_engine(
+                connection_string,
+                poolclass=NullPool,  # Disable pooling for serverless
+                echo=self.connection_config.get('echo', False),
+            )
+
+            # Test connection
+            with self._engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+
+            self._is_connected = True
+            logger.info("SQLite database connection established")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to connect to SQLite database: {str(e)}")
+            raise
+
+    async def disconnect(self) -> None:
+        """Close database connection."""
+        if self._engine:
+            self._engine.dispose()
+            self._engine = None
+        self._is_connected = False
+        logger.info("SQLite database connection closed")
+
+    async def list_resources(self, path: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List tables in database."""
+        if not self._engine:
+            raise RuntimeError("Not connected to database")
+
+        inspector = inspect(self._engine)
+
+        resources = []
+        # For SQLite, there's no schema concept like PostgreSQL, just list tables
+        for table_name in inspector.get_table_names():
+            resources.append({
+                "name": table_name,
+                "schema": "",  # SQLite doesn't use schemas
+                "path": table_name,
+                "type": "table",
+            })
+
+        return resources
+
+    async def get_schema(self, resource_path: str) -> Dict[str, Any]:
+        """Get table schema."""
+        if not self._engine:
+            raise RuntimeError("Not connected to database")
+
+        # For SQLite, we don't have schema prefixes like PostgreSQL
+        # Just use the table name directly
+        table_name = resource_path
+        
+        # Check if table exists
+        inspector = inspect(self._engine)
+        if table_name not in inspector.get_table_names():
+            raise ValueError(f"Table '{table_name}' does not exist in database")
+
+        # Get columns using SQLAlchemy's inspector
+        columns_info = inspector.get_columns(table_name)
+
+        columns = {}
+        for col in columns_info:
+            col_name = col['name']
+            col_type = col['type']
+
+            columns[col_name] = {
+                "type": str(col_type),
+                "nullable": col.get('nullable', True),
+                "default": str(col.get('default')) if col.get('default') else None,
+            }
+
+            # Add type-specific info
+            if hasattr(col_type, 'length') and col_type.length:
+                columns[col_name]['max_length'] = col_type.length
+            if hasattr(col_type, 'precision') and col_type.precision:
+                columns[col_name]['precision'] = col_type.precision
+            if hasattr(col_type, 'scale') and col_type.scale:
+                columns[col_name]['scale'] = col_type.scale
+
+        # Get primary keys
+        pk_info = inspector.get_pk_constraint(table_name)
+        primary_keys = pk_info.get('constrained_columns', []) if pk_info else []
+
+        # Get foreign keys
+        fk_info = inspector.get_foreign_keys(table_name)
+        foreign_keys = [
+            {
+                "column": fk['constrained_columns'][0] if fk['constrained_columns'] else None,
+                "referenced_table": fk['referred_table'],
+                "referenced_column": fk['referred_columns'][0] if fk['referred_columns'] else None,
+            }
+            for fk in fk_info
+        ]
+
+        return {
+            "name": table_name,
+            "schema": "",  # SQLite doesn't use schemas
+            "columns": columns,
+            "primary_keys": primary_keys,
+            "foreign_keys": foreign_keys,
+            "column_count": len(columns),
+        }
+
+    async def read_data(
+        self,
+        resource_path: str,
+        columns: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Read data from table."""
+        if not self._engine:
+            raise RuntimeError("Not connected to database")
+
+        # For SQLite, just use the table name directly
+        table_name = resource_path
+
+        # Build query
+        column_str = ', '.join(f'"{c}"' for c in columns) if columns else '*'
+        query = f'SELECT {column_str} FROM "{table_name}"'
+
+        # Add filters
+        params = {}
+        if filters:
+            conditions = []
+            for i, (col, val) in enumerate(filters.items()):
+                param_name = f"param_{i}"
+                conditions.append(f'"{col}" = :{param_name}')
+                params[param_name] = val
+            query += " WHERE " + " AND ".join(conditions)
+
+        # Add pagination
+        if limit:
+            query += f" LIMIT {limit}"
+        if offset:
+            query += f" OFFSET {offset}"
+
+        # Execute query
+        with self._engine.connect() as conn:
+            result = conn.execute(text(query), params)
+            rows = [dict(row._mapping) for row in result]
+
+        return rows
+
+    async def sample_data(
+        self,
+        resource_path: str,
+        sample_size: int = 1000,
+        method: str = "random",
+    ) -> List[Dict[str, Any]]:
+        """Sample data from table."""
+        if not self._engine:
+            raise RuntimeError("Not connected to database")
+
+        # For SQLite, just use the table name directly
+        table_name = resource_path
+
+        if method == "random":
+            # Use SQLite's RANDOM() function
+            query = f'SELECT * FROM "{table_name}" ORDER BY RANDOM() LIMIT {sample_size}'
+        elif method == "first":
+            query = f'SELECT * FROM "{table_name}" LIMIT {sample_size}'
+        elif method == "last":
+            # For last records, we need to order by a unique column if available
+            # Since we don't know the structure, we'll just use rowid
+            query = f'SELECT * FROM "{table_name}" ORDER BY rowid DESC LIMIT {sample_size}'
+        else:
+            raise ValueError(f"Unknown sampling method: {method}")
+
+        # Execute query
+        with self._engine.connect() as conn:
+            result = conn.execute(text(query))
+            rows = [dict(row._mapping) for row in result]
+
+        return rows
+
+    async def get_row_count(self, resource_path: str) -> int:
+        """Get row count for table."""
+        if not self._engine:
+            raise RuntimeError("Not connected to database")
+
+        # For SQLite, just use the table name directly
+        table_name = resource_path
+
+        query = f'SELECT COUNT(*) FROM "{table_name}"'
+
+        with self._engine.connect() as conn:
+            result = conn.execute(text(query))
+            count = result.scalar()
+
+        return count
+
+    async def get_metadata(self, resource_path: str) -> Dict[str, Any]:
+        """Get table metadata."""
+        if not self._engine:
+            raise RuntimeError("Not connected to database")
+
+        schema = await self.get_schema(resource_path)
+        row_count = await self.get_row_count(resource_path)
+
+        return {
+            "path": resource_path,
+            "name": schema['name'],
+            "schema": schema['schema'],
+            "column_count": schema['column_count'],
+            "row_count": row_count,
+            "primary_keys": schema['primary_keys'],
+        }
