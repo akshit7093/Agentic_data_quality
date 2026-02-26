@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, File, UploadFile
+from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel
 
 from app.core.config import get_settings
@@ -136,6 +137,10 @@ class ValidationStatusResponse(BaseModel):
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     error_message: Optional[str] = None
+    target_path: Optional[str] = None
+    data_source_id: Optional[str] = None
+    validation_mode: Optional[str] = None
+    data_profile: Optional[Dict[str, Any]] = None
 
 class LLMHealthResponse(BaseModel):
     status: str
@@ -326,6 +331,31 @@ async def preview_data_source(
 # Validation Routes
 # ===================================================================
 
+@router.get("/validations")
+async def list_validations():
+    """List all validations."""
+    validations = []
+    for vid, v in _validation_store.items():
+        validations.append({
+            "id": vid,
+            "validation_id": vid,
+            "status": v["status"],
+            "current_step": v.get("current_step"),
+            "quality_score": v.get("quality_score"),
+            "total_rules": v.get("total_rules", 0),
+            "passed_rules": v.get("passed_rules", 0),
+            "failed_rules": v.get("failed_rules", 0),
+            "started_at": v.get("started_at"),
+            "completed_at": v.get("completed_at"),
+            "target_path": v.get("target_path", ""),
+            "data_source_id": v.get("data_source_id", ""),
+            "validation_mode": v.get("validation_mode", "hybrid"),
+            "error_message": v.get("error_message"),
+        })
+    # Sort by started_at descending (newest first)
+    validations.sort(key=lambda x: x.get("started_at", ""), reverse=True)
+    return validations
+
 @router.post("/validate", response_model=ValidationResponse)
 async def submit_validation(
     request: ValidationRequest,
@@ -334,7 +364,7 @@ async def submit_validation(
     """Submit a validation request."""
     validation_id = str(uuid.uuid4())
 
-    # Store initial state
+    # Store initial state with metadata
     _validation_store[validation_id] = {
         "status": "pending",
         "current_step": "starting",
@@ -346,6 +376,9 @@ async def submit_validation(
         "completed_at": None,
         "error_message": None,
         "result": None,
+        "target_path": request.target_path,
+        "data_source_id": request.data_source_id,
+        "validation_mode": request.validation_mode,
     }
 
     background_tasks.add_task(run_validation, validation_id, request)
@@ -429,6 +462,10 @@ async def get_validation_status(validation_id: str):
         raise HTTPException(status_code=404, detail="Validation not found")
 
     v = _validation_store[validation_id]
+    result = v.get("result", {})
+    data_profile = None
+    if result and "data_profile" in result:
+        data_profile = jsonable_encoder(result["data_profile"])
     return ValidationStatusResponse(
         validation_id=validation_id,
         status=v["status"],
@@ -440,6 +477,10 @@ async def get_validation_status(validation_id: str):
         started_at=v.get("started_at"),
         completed_at=v.get("completed_at"),
         error_message=v.get("error_message"),
+        target_path=v.get("target_path"),
+        data_source_id=v.get("data_source_id"),
+        validation_mode=v.get("validation_mode"),
+        data_profile=data_profile,
     )
 
 

@@ -10,8 +10,10 @@ import {
   Activity,
   Brain,
   FileUp,
+  Clock,
+  Inbox,
 } from 'lucide-react';
-import { useSubmitValidation, useRecommendRules } from '@/hooks/useValidations';
+import { useValidations, useSubmitValidation, useRecommendRules } from '@/hooks/useValidations';
 import { useDataSources } from '@/hooks/useDataSources';
 import Modal from '@/components/Modal';
 
@@ -25,6 +27,7 @@ interface ValidationFormData {
 export default function Validations() {
   const navigate = useNavigate();
   const { data: dataSources } = useDataSources();
+  const { data: validations, isLoading: validationsLoading } = useValidations();
   const submitValidation = useSubmitValidation();
   const recommendRules = useRecommendRules();
 
@@ -35,62 +38,6 @@ export default function Validations() {
     validation_mode: 'hybrid',
     sample_size: 1000,
   });
-
-  // Mock validations data - would come from API
-  const mockValidations = [
-    {
-      id: '1',
-      target_path: 'customers.csv',
-      status: 'completed',
-      validation_mode: 'hybrid',
-      quality_score: 92,
-      total_rules: 15,
-      passed_rules: 14,
-      failed_rules: 1,
-      records_processed: 10000,
-      started_at: '2024-02-11T10:00:00Z',
-      completed_at: '2024-02-11T10:30:00Z',
-    },
-    {
-      id: '2',
-      target_path: 'orders.parquet',
-      status: 'completed',
-      validation_mode: 'ai_recommended',
-      quality_score: 78,
-      total_rules: 20,
-      passed_rules: 16,
-      failed_rules: 4,
-      records_processed: 50000,
-      started_at: '2024-02-11T09:00:00Z',
-      completed_at: '2024-02-11T09:15:00Z',
-    },
-    {
-      id: '3',
-      target_path: 'products.json',
-      status: 'failed',
-      validation_mode: 'custom_rules',
-      quality_score: 45,
-      total_rules: 12,
-      passed_rules: 5,
-      failed_rules: 7,
-      records_processed: 5000,
-      started_at: '2024-02-11T08:00:00Z',
-      completed_at: '2024-02-11T08:05:00Z',
-    },
-    {
-      id: '4',
-      target_path: 'inventory.xlsx',
-      status: 'running',
-      validation_mode: 'hybrid',
-      quality_score: null,
-      total_rules: 18,
-      passed_rules: 10,
-      failed_rules: 2,
-      records_processed: 25000,
-      started_at: '2024-02-11T11:00:00Z',
-      completed_at: null,
-    },
-  ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -112,6 +59,8 @@ export default function Validations() {
         return <XCircle className="w-5 h-5 text-danger-500" />;
       case 'running':
         return <Activity className="w-5 h-5 text-primary-500 animate-pulse" />;
+      case 'pending':
+        return <Clock className="w-5 h-5 text-gray-400 animate-pulse" />;
       default:
         return <AlertCircle className="w-5 h-5 text-gray-400" />;
     }
@@ -125,6 +74,8 @@ export default function Validations() {
         return <span className="badge-danger">Failed</span>;
       case 'running':
         return <span className="badge-info">Running</span>;
+      case 'pending':
+        return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">Pending</span>;
       default:
         return <span className="badge">{status}</span>;
     }
@@ -182,121 +133,156 @@ export default function Validations() {
         </button>
       </div>
 
+      {/* Loading state */}
+      {validationsLoading && (
+        <div className="flex items-center justify-center p-12">
+          <RefreshCw className="w-8 h-8 text-primary-500 animate-spin mr-3" />
+          <span className="text-gray-500">Loading validations...</span>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!validationsLoading && (!validations || validations.length === 0) && (
+        <div className="card">
+          <div className="flex flex-col items-center justify-center py-16">
+            <Inbox className="w-16 h-16 text-gray-300 mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900">No Validations Yet</h2>
+            <p className="text-gray-500 mt-2 text-center max-w-md">
+              Start a new validation to analyze your data quality. Select a data source,
+              choose a table or file, and let the AI do the rest.
+            </p>
+            <button
+              onClick={() => navigate('/validations/new')}
+              className="btn-primary mt-6"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              New Validation
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Validations list */}
-      <div className="card">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Target
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Mode
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Quality Score
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Rules
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Records
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Duration
-                </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {mockValidations.map((validation) => (
-                <tr
-                  key={validation.id}
-                  className="hover:bg-gray-50 cursor-pointer"
-                  onClick={() => navigate(`/validations/${validation.id}`)}
-                >
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <FileUp className="w-4 h-4 text-gray-400 mr-2" />
-                      <span className="text-sm font-medium text-gray-900">
-                        {validation.target_path}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {getModeBadge(validation.validation_mode)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center space-x-2">
-                      {getStatusIcon(validation.status)}
-                      {getStatusBadge(validation.status)}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {validation.quality_score !== null ? (
-                      <span
-                        className={`text-sm font-semibold ${getScoreColor(
-                          validation.quality_score
-                        )}`}
-                      >
-                        {validation.quality_score}%
-                      </span>
-                    ) : (
-                      <span className="text-sm text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center space-x-2 text-sm">
-                      <span className="text-success-600">
-                        {validation.passed_rules}
-                      </span>
-                      <span className="text-gray-400">/</span>
-                      <span className="text-danger-600">
-                        {validation.failed_rules}
-                      </span>
-                      <span className="text-gray-400">/</span>
-                      <span className="text-gray-600">{validation.total_rules}</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {validation.records_processed.toLocaleString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {validation.completed_at && validation.started_at
-                      ? `${Math.round(
+      {!validationsLoading && validations && validations.length > 0 && (
+        <div className="card">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Target
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Mode
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Quality Score
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Rules
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Started
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Duration
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {validations.map((validation: any) => (
+                  <tr
+                    key={validation.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() => navigate(`/validations/${validation.id}`)}
+                  >
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <FileUp className="w-4 h-4 text-gray-400 mr-2" />
+                        <span className="text-sm font-medium text-gray-900">
+                          {validation.target_path || '—'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getModeBadge(validation.validation_mode || 'hybrid')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-2">
+                        {getStatusIcon(validation.status)}
+                        {getStatusBadge(validation.status)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {validation.quality_score != null ? (
+                        <span
+                          className={`text-sm font-semibold ${getScoreColor(
+                            validation.quality_score
+                          )}`}
+                        >
+                          {validation.quality_score}%
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-400">—</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center space-x-2 text-sm">
+                        <span className="text-success-600">
+                          {validation.passed_rules || 0}
+                        </span>
+                        <span className="text-gray-400">/</span>
+                        <span className="text-danger-600">
+                          {validation.failed_rules || 0}
+                        </span>
+                        <span className="text-gray-400">/</span>
+                        <span className="text-gray-600">{validation.total_rules || 0}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {validation.started_at
+                        ? new Date(validation.started_at).toLocaleTimeString()
+                        : '—'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {validation.completed_at && validation.started_at
+                        ? `${Math.round(
                           (new Date(validation.completed_at).getTime() -
                             new Date(validation.started_at).getTime()) /
-                            1000
+                          1000
                         )}s`
-                      : validation.status === 'running'
-                      ? 'Running...'
-                      : '-'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/validations/${validation.id}`);
-                      }}
-                      className="text-primary-600 hover:text-primary-700 text-sm font-medium"
-                    >
-                      View
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        : validation.status === 'running'
+                          ? 'Running...'
+                          : validation.status === 'pending'
+                            ? 'Pending...'
+                            : '—'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/validations/${validation.id}`);
+                        }}
+                        className="text-primary-600 hover:text-primary-700 text-sm font-medium"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* New Validation Modal */}
+      {/* New Validation Modal -- kept for backward compat */}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -327,7 +313,7 @@ export default function Validations() {
             <input
               type="text"
               className="form-input"
-              placeholder="e.g., customers.csv or public.users"
+              placeholder="e.g., customers or orders"
               value={formData.target_path}
               onChange={(e) =>
                 setFormData({ ...formData, target_path: e.target.value })

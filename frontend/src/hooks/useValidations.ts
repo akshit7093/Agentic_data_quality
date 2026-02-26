@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 export const useSubmitValidation = () => {
   const queryClient = useQueryClient();
   const addValidationRun = useStore((state) => state.addValidationRun);
-  
+
   return useMutation({
     mutationFn: validationApi.submit,
     onSuccess: (data) => {
@@ -19,7 +19,9 @@ export const useSubmitValidation = () => {
         total_rules: 0,
         passed_rules: 0,
         failed_rules: 0,
+        warning_rules: 0,
         records_processed: 0,
+        current_step: ''
       });
       queryClient.invalidateQueries({ queryKey: ['validations'] });
       toast.success('Validation started successfully');
@@ -33,7 +35,7 @@ export const useSubmitValidation = () => {
 
 export const useValidationStatus = (id: string | null) => {
   const updateValidationRun = useStore((state) => state.updateValidationRun);
-  
+
   return useQuery({
     queryKey: ['validation', id],
     queryFn: async () => {
@@ -42,8 +44,9 @@ export const useValidationStatus = (id: string | null) => {
       updateValidationRun(id, data);
       return data;
     },
-    refetchInterval: (data) => {
-      if (data?.status === 'running' || data?.status === 'pending') {
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === 'running' || status === 'pending') {
         return 2000; // Poll every 2 seconds while running
       }
       return false;
@@ -52,14 +55,22 @@ export const useValidationStatus = (id: string | null) => {
   });
 };
 
-export const useValidationResults = (id: string | null) => {
+export const useValidations = () => {
   return useQuery({
-    queryKey: ['validation', id, 'results'],
+    queryKey: ['validations'],
+    queryFn: validationApi.getAll,
+    refetchInterval: 5000, // Auto-refresh every 5 seconds
+  });
+};
+
+export const useValidationResults = (id: string | null, isCompleted: boolean = false) => {
+  return useQuery({
+    queryKey: ['validation', id, 'results', isCompleted],
     queryFn: async () => {
       if (!id) return null;
       return validationApi.getResults(id);
     },
-    enabled: !!id,
+    enabled: !!id && isCompleted,
   });
 };
 

@@ -39,6 +39,7 @@ export interface ValidationRun {
   id: string;
   data_source_id: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  current_step?: string;
   validation_mode: string;
   target_path: string;
   quality_score?: number;
@@ -51,6 +52,7 @@ export interface ValidationRun {
   completed_at?: string;
   error_message?: string;
   results?: ValidationResult[];
+  data_profile?: DataProfile;
 }
 
 export interface DataProfile {

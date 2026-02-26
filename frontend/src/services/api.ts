@@ -18,9 +18,9 @@ export const dataSourceApi = {
   update: (id: string, data: Partial<DataSource>) => api.put<DataSource>(`/datasources/${id}`, data).then(r => r.data),
   delete: (id: string) => api.delete(`/datasources/${id}`).then(r => r.data),
   testConnection: (id: string) => api.post(`/datasources/${id}/test`).then(r => r.data),
-  getResources: (id: string, path?: string) => 
+  getResources: (id: string, path?: string) =>
     api.get(`/datasources/${id}/resources`, { params: { path } }).then(r => r.data),
-  getSchema: (id: string, resourcePath: string) => 
+  getSchema: (id: string, resourcePath: string) =>
     api.get(`/datasources/${id}/schema`, { params: { resource_path: resourcePath } }).then(r => r.data),
   getPreview: (id: string, resourcePath: string, limit: number = 20) =>
     api.get(`/datasources/${id}/preview`, { params: { resource_path: resourcePath, limit } }).then(r => r.data),
@@ -28,7 +28,7 @@ export const dataSourceApi = {
 
 // Validation Rules
 export const ruleApi = {
-  getAll: (params?: { data_source_id?: string; is_active?: boolean }) => 
+  getAll: (params?: { data_source_id?: string; is_active?: boolean }) =>
     api.get<ValidationRule[]>('/rules', { params }).then(r => r.data),
   create: (data: Partial<ValidationRule>) => api.post<ValidationRule>('/rules', data).then(r => r.data),
   update: (id: string, data: Partial<ValidationRule>) => api.put<ValidationRule>(`/rules/${id}`, data).then(r => r.data),
@@ -37,6 +37,7 @@ export const ruleApi = {
 
 // Validations
 export const validationApi = {
+  getAll: () => api.get('/validations').then(r => r.data),
   submit: (data: {
     data_source_id: string;
     target_path: string;
@@ -44,10 +45,10 @@ export const validationApi = {
     custom_rules?: Partial<ValidationRule>[];
     sample_size?: number;
   }) => api.post<{ validation_id: string; status: string }>('/validate', data).then(r => r.data),
-  
+
   getStatus: (id: string) => api.get<ValidationRun>(`/validate/${id}`).then(r => r.data),
-  getResults: (id: string) => api.get<ValidationResult[]>(`/validate/${id}/results`).then(r => r.data),
-  getReport: (id: string, format: 'json' | 'pdf' | 'excel' = 'json') => 
+  getResults: (id: string) => api.get(`/validate/${id}/results`).then(r => r.data),
+  getReport: (id: string, format: 'json' | 'pdf' | 'excel' = 'json') =>
     api.get(`/validate/${id}/report`, { params: { format } }).then(r => r.data),
 };
 
