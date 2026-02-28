@@ -410,6 +410,9 @@ If you have run all checks and investigated failures, output your final <REPORT>
             query       = action_data.get("query")
             q_type      = action_data.get("query_type", "sql")
 
+            if not query and q_type.lower() == 'sql':
+                raise ValueError("LLM payload is missing the 'query' string.")
+
             logger.info(f"Executing {q_type.upper()}: {query}")
 
             from app.validation.engine import ValidationEngine
@@ -429,15 +432,15 @@ If you have run all checks and investigated failures, output your final <REPORT>
                         )
                         await connector.connect()
                         
-                        # Native execution
+                        # Native execution (returns dict with status, row_count, sample_rows)
                         pushdown_results = await connector.execute_raw_query(query)
                         await connector.disconnect()
                         
-                        tool_result = {
-                            "status": "success",
-                            "row_count": len(pushdown_results),
-                            "sample_rows": pushdown_results[:5]  # Limit to 5 for context limit
-                        }
+                        if pushdown_results.get("status") == "success":
+                            tool_result = pushdown_results
+                        else:
+                            logger.warning(f"Native SQL execution failed natively: {pushdown_results.get('error')}. Falling back to sandbox.")
+                            tool_result = None
                     except Exception as pg_err:
                         logger.warning(f"Native SQL execution failed: {pg_err}. Falling back to sandbox.")
                         tool_result = None # Fall through to engine evaluation
