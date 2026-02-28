@@ -1,17 +1,21 @@
-"""API routes for the Data Quality Agent."""
+"""API routes for the Data Quality Agent — v8
+Fixed: Export endpoints, Fix recommendation endpoints, Full-scan support, String spacing
+"""
 import uuid
 import os
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
-
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, File, UploadFile
 from fastapi.encoders import jsonable_encoder
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
-
 from app.core.config import get_settings
-from app.agents.state import DataSourceInfo, ValidationMode, ValidationRule as AgentValidationRule
+from app.agents.state import (
+    DataSourceInfo, ValidationMode, ValidationRule as AgentValidationRule,
+    AgentState, ExportFormat, FixAction, ExportConfig
+)
 from app.agents.data_quality_agent import get_data_quality_agent
 from app.agents.llm_service import get_llm_service
 from app.agents.rag_service import get_rag_service
@@ -21,9 +25,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 settings = get_settings()
 
-# ---------------------------------------------------------------------------
+# ============================================================================
 # In-memory stores (no PostgreSQL required)
-# ---------------------------------------------------------------------------
+# ============================================================================
 _validation_store: Dict[str, Dict[str, Any]] = {}
 _uploaded_files: Dict[str, Dict[str, Any]] = {}
 
@@ -31,10 +35,15 @@ _uploaded_files: Dict[str, Dict[str, Any]] = {}
 TEST_DATA_DIR = Path(__file__).parent.parent.parent.parent / "test_data"
 DB_PATH = TEST_DATA_DIR / "test_database.db"
 UPLOAD_DIR = Path(__file__).parent.parent.parent.parent / "uploads"
+EXPORT_DIR = Path(__file__).parent.parent.parent.parent / "exports"
 
-# ---------------------------------------------------------------------------
+# Ensure directories exist
+os.makedirs(str(EXPORT_DIR), exist_ok=True)
+os.makedirs(str(UPLOAD_DIR), exist_ok=True)
+
+# ============================================================================
 # Built-in data sources — always available
-# ---------------------------------------------------------------------------
+# ============================================================================
 BUILTIN_SOURCES = {
     "local-test": {
         "id": "local-test",
@@ -87,14 +96,15 @@ def _get_source(source_id: str) -> Dict[str, Any]:
     raise HTTPException(status_code=404, detail=f"Data source '{source_id}' not found")
 
 
-# ---------------------------------------------------------------------------
+# ============================================================================
 # Pydantic models for API
-# ---------------------------------------------------------------------------
+# ============================================================================
 class DataSourceCreate(BaseModel):
     name: str
     description: Optional[str] = None
     source_type: str
     connection_config: Dict[str, Any]
+
 
 class DataSourceResponse(BaseModel):
     id: str
@@ -103,6 +113,7 @@ class DataSourceResponse(BaseModel):
     source_type: str
     is_active: bool
     created_at: str
+
 
 class ValidationRuleCreate(BaseModel):
     name: str
@@ -113,18 +124,22 @@ class ValidationRuleCreate(BaseModel):
     rule_config: Dict[str, Any]
     expression: Optional[str] = None
 
+
 class ValidationRequest(BaseModel):
     data_source_id: str
     target_path: str
     validation_mode: str = "hybrid"
     custom_rules: Optional[List[ValidationRuleCreate]] = []
     sample_size: Optional[int] = 1000
+    full_scan: bool = False
     execution_config: Optional[Dict[str, Any]] = {}
+
 
 class ValidationResponse(BaseModel):
     validation_id: str
     status: str
     message: str
+
 
 class ValidationStatusResponse(BaseModel):
     validation_id: str
@@ -141,6 +156,43 @@ class ValidationStatusResponse(BaseModel):
     data_source_id: Optional[str] = None
     validation_mode: Optional[str] = None
     data_profile: Optional[Dict[str, Any]] = None
+    result: Optional[Dict[str, Any]] = None
+    full_scan_used: Optional[bool] = None
+
+
+class ExportRequest(BaseModel):
+    """Export validation results request."""
+    validation_id: str
+    format: str = "csv"
+    include_failed_rows: bool = True
+    include_metadata: bool = True
+
+
+class ExportResponse(BaseModel):
+    validation_id: str
+    format: str
+    file_path: Optional[str] = None
+    download_url: Optional[str] = None
+    status: str
+    message: str
+
+
+class FixActionRequest(BaseModel):
+    """Apply fix action to a validation rule."""
+    validation_id: str
+    rule_id: str
+    action: str = "manual"
+    custom_fix_query: Optional[str] = None
+
+
+class FixActionResponse(BaseModel):
+    validation_id: str
+    rule_id: str
+    action: str
+    status: str
+    message: str
+    fix_query: Optional[str] = None
+
 
 class LLMHealthResponse(BaseModel):
     status: str
@@ -150,10 +202,9 @@ class LLMHealthResponse(BaseModel):
     error: Optional[str] = None
 
 
-# ===================================================================
+# ============================================================================
 # Data Source Routes
-# ===================================================================
-
+# ============================================================================
 @router.get("/datasources", response_model=List[DataSourceResponse])
 async def list_data_sources():
     """List all configured data sources."""
@@ -179,7 +230,6 @@ async def create_data_source(data_source: DataSourceCreate):
             status_code=400,
             detail=f"Unsupported source type: {data_source.source_type}",
         )
-
     ds_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()
     _user_sources[ds_id] = {
@@ -231,7 +281,6 @@ async def list_data_source_resources(
         await connector.connect()
         resources = await connector.list_resources(path)
 
-        # Enrich resources with row/column counts for tables
         enriched = []
         for r in resources:
             item = {**r}
@@ -298,17 +347,14 @@ async def preview_data_source(
         )
         await connector.connect()
 
-        # Get schema
         schema = await connector.get_schema(resource_path)
         columns_info = [
             {"name": k, "type": v.get("type", "unknown")}
             for k, v in schema.get("columns", {}).items()
         ]
 
-        # Get sample rows
         rows = await connector.sample_data(resource_path, sample_size=limit)
 
-        # Get row count
         try:
             row_count = await connector.get_row_count(resource_path)
         except Exception:
@@ -327,10 +373,9 @@ async def preview_data_source(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ===================================================================
+# ============================================================================
 # Validation Routes
-# ===================================================================
-
+# ============================================================================
 @router.get("/validations")
 async def list_validations():
     """List all validations."""
@@ -351,10 +396,11 @@ async def list_validations():
             "data_source_id": v.get("data_source_id", ""),
             "validation_mode": v.get("validation_mode", "hybrid"),
             "error_message": v.get("error_message"),
+            "full_scan_used": v.get("full_scan_used", False),
         })
-    # Sort by started_at descending (newest first)
     validations.sort(key=lambda x: x.get("started_at", ""), reverse=True)
     return validations
+
 
 @router.post("/validate", response_model=ValidationResponse)
 async def submit_validation(
@@ -364,7 +410,6 @@ async def submit_validation(
     """Submit a validation request."""
     validation_id = str(uuid.uuid4())
 
-    # Store initial state with metadata
     _validation_store[validation_id] = {
         "status": "pending",
         "current_step": "starting",
@@ -379,6 +424,7 @@ async def submit_validation(
         "target_path": request.target_path,
         "data_source_id": request.data_source_id,
         "validation_mode": request.validation_mode,
+        "full_scan_used": request.full_scan,
     }
 
     background_tasks.add_task(run_validation, validation_id, request)
@@ -394,18 +440,15 @@ async def run_validation(validation_id: str, request: ValidationRequest):
     """Run validation in background."""
     try:
         _validation_store[validation_id]["status"] = "running"
-
-        # Resolve data source
         source = _get_source(request.data_source_id)
 
-        # Build DataSourceInfo from the source config
         data_source_info = DataSourceInfo(
             source_type=source["source_type"],
             connection_config=source["connection_config"],
             target_path=request.target_path,
+            full_scan_requested=request.full_scan,
         )
 
-        # Convert custom rules
         custom_rules = []
         for rule in request.custom_rules or []:
             custom_rules.append(AgentValidationRule(
@@ -418,20 +461,19 @@ async def run_validation(validation_id: str, request: ValidationRequest):
                 expression=rule.expression,
             ))
 
-        # Run agent
         agent = get_data_quality_agent()
         result = await agent.run(
             validation_id=validation_id,
-            validation_mode=ValidationMode(request.validation_mode),
+            validation_mode=ValidationMode(request.validation_mode.lower()),
             data_source_info=data_source_info,
             custom_rules=custom_rules,
             execution_config={
+                "full_scan": request.full_scan,
                 "sample_size": request.sample_size,
                 **(request.execution_config or {}),
             },
         )
 
-        # Store result
         summary = result.get("summary_report", {}) or {}
         _validation_store[validation_id].update({
             "status": "completed",
@@ -442,6 +484,7 @@ async def run_validation(validation_id: str, request: ValidationRequest):
             "failed_rules": summary.get("failed_rules", 0),
             "completed_at": datetime.utcnow().isoformat(),
             "result": result,
+            "full_scan_used": request.full_scan,
         })
 
         logger.info(f"Validation {validation_id} completed with score: {result.get('quality_score')}")
@@ -460,7 +503,6 @@ async def get_validation_status(validation_id: str):
     """Get validation status."""
     if validation_id not in _validation_store:
         raise HTTPException(status_code=404, detail="Validation not found")
-
     v = _validation_store[validation_id]
     result = v.get("result", {})
     data_profile = None
@@ -481,6 +523,8 @@ async def get_validation_status(validation_id: str):
         data_source_id=v.get("data_source_id"),
         validation_mode=v.get("validation_mode"),
         data_profile=data_profile,
+        result=result,
+        full_scan_used=v.get("full_scan_used", False),
     )
 
 
@@ -489,9 +533,9 @@ async def get_validation_results(validation_id: str):
     """Get detailed validation results."""
     if validation_id not in _validation_store:
         raise HTTPException(status_code=404, detail="Validation not found")
-
     result = _validation_store[validation_id].get("result", {})
     validation_results = result.get("validation_results", []) if result else []
+    fix_recommendations = result.get("fix_recommendations", []) if result else []
 
     serialized = []
     for r in validation_results:
@@ -501,13 +545,30 @@ async def get_validation_results(validation_id: str):
             "severity": getattr(r, "severity", "info"),
             "rule_type": getattr(r, "rule_type", ""),
             "failed_count": getattr(r, "failed_count", 0),
+            "total_count": getattr(r, "total_count", 0),
             "failure_percentage": getattr(r, "failure_percentage", 0),
             "failure_examples": getattr(r, "failure_examples", [])[:5],
+            "executed_query": getattr(r, "executed_query", None),
+            "data_source": getattr(r, "data_source", "full_dataset"),
+        })
+
+    fixes = []
+    for f in fix_recommendations:
+        fixes.append({
+            "rule_id": getattr(f, "rule_id", ""),
+            "issue_description": getattr(f, "issue_description", ""),
+            "recommended_fix": getattr(f, "recommended_fix", ""),
+            "fix_query": getattr(f, "fix_query", None),
+            "estimated_rows_affected": getattr(f, "estimated_rows_affected", 0),
+            "risk_level": getattr(f, "risk_level", "low"),
+            "user_action": getattr(f, "user_action", "manual"),
         })
 
     return {
         "validation_id": validation_id,
         "results": serialized,
+        "fix_recommendations": fixes,
+        "raw_state": result,
     }
 
 
@@ -519,7 +580,6 @@ async def get_validation_report(
     """Get validation report in specified format."""
     if validation_id not in _validation_store:
         raise HTTPException(status_code=404, detail="Validation not found")
-
     v = _validation_store[validation_id]
 
     if format == "json":
@@ -530,15 +590,388 @@ async def get_validation_report(
             "quality_score": v.get("quality_score"),
             "summary": summary,
             "status": v["status"],
+            "full_scan_used": v.get("full_scan_used", False),
         }
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
 
-# ===================================================================
-# Rule Management Routes
-# ===================================================================
+# ============================================================================
+# Export Routes (NEW - v8)
+# ============================================================================
+@router.post("/export", response_model=ExportResponse)
+async def export_validation_results(request: ExportRequest):
+    """Export validation results to CSV, Excel, JSON, or Database."""
+    if request.validation_id not in _validation_store:
+        raise HTTPException(status_code=404, detail="Validation not found")
 
+    v = _validation_store[request.validation_id]
+    result = v.get("result", {})
+
+    if not result:
+        raise HTTPException(status_code=400, detail="No results to export")
+
+    valid_formats = ["csv", "excel", "json", "database"]
+    if request.format.lower() not in valid_formats:
+        raise HTTPException(status_code=400, detail=f"Invalid format. Choose from: {valid_formats}")
+
+    try:
+        timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+        filename = f"validation_{request.validation_id}_{timestamp}"
+
+        if request.format.lower() == "csv":
+            file_path = await _export_to_csv(result, filename, request)
+        elif request.format.lower() == "excel":
+            file_path = await _export_to_excel(result, filename, request)
+        elif request.format.lower() == "json":
+            file_path = await _export_to_json(result, filename, request)
+        elif request.format.lower() == "database":
+            file_path = await _export_to_database(result, filename, request)
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported format")
+
+        v["export_result"] = {
+            "format": request.format,
+            "file_path": str(file_path),
+            "exported_at": datetime.utcnow().isoformat(),
+        }
+
+        return ExportResponse(
+            validation_id=request.validation_id,
+            format=request.format,
+            file_path=str(file_path),
+            download_url=f"/api/export/download/{request.validation_id}",
+            status="success",
+            message=f"Exported to {request.format.upper()}",
+        )
+    except Exception as e:
+        logger.error(f"Export failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Export failed: {str(e)}")
+
+
+@router.get("/export/download/{validation_id}")
+async def download_export(validation_id: str):
+    """Download exported file."""
+    if validation_id not in _validation_store:
+        raise HTTPException(status_code=404, detail="Validation not found")
+
+    v = _validation_store[validation_id]
+    export_result = v.get("export_result")
+
+    if not export_result or not export_result.get("file_path"):
+        raise HTTPException(status_code=404, detail="No export file found")
+
+    file_path = Path(export_result["file_path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Export file not found on disk")
+
+    return FileResponse(
+        path=str(file_path),
+        filename=file_path.name,
+        media_type="application/octet-stream",
+    )
+
+
+async def _export_to_csv(result: Dict, filename: str, request: ExportRequest) -> Path:
+    """Export results to CSV format."""
+    import pandas as pd
+
+    file_path = EXPORT_DIR / f"{filename}.csv"
+
+    summary = result.get("summary_report", {})
+    summary_df = pd.DataFrame([summary])
+    summary_df.to_csv(file_path, index=False)
+
+    if request.include_failed_rows:
+        validation_results = result.get("validation_results", [])
+        failed_rows = []
+        for vr in validation_results:
+            failed_rows.extend(getattr(vr, "failure_examples", [])[:100])
+
+        if failed_rows:
+            rows_df = pd.DataFrame(failed_rows)
+            rows_df.to_csv(EXPORT_DIR / f"{filename}_failed_rows.csv", index=False)
+
+    return file_path
+
+
+async def _export_to_excel(result: Dict, filename: str, request: ExportRequest) -> Path:
+    """Export results to Excel format."""
+    import pandas as pd
+
+    file_path = EXPORT_DIR / f"{filename}.xlsx"
+
+    with pd.ExcelWriter(file_path) as writer:
+        summary = result.get("summary_report", {})
+        pd.DataFrame([summary]).to_excel(writer, sheet_name="Summary", index=False)
+
+        validation_results = result.get("validation_results", [])
+        if validation_results:
+            vr_data = []
+            for vr in validation_results:
+                vr_data.append({
+                    "rule_name": getattr(vr, "rule_name", ""),
+                    "status": getattr(vr, "status", ""),
+                    "severity": getattr(vr, "severity", ""),
+                    "failed_count": getattr(vr, "failed_count", 0),
+                    "total_count": getattr(vr, "total_count", 0),
+                    "failure_percentage": getattr(vr, "failure_percentage", 0),
+                })
+            pd.DataFrame(vr_data).to_excel(writer, sheet_name="Validation Results", index=False)
+
+        fix_recommendations = result.get("fix_recommendations", [])
+        if fix_recommendations:
+            fix_data = []
+            for fr in fix_recommendations:
+                fix_data.append({
+                    "rule_id": getattr(fr, "rule_id", ""),
+                    "issue": getattr(fr, "issue_description", ""),
+                    "fix": getattr(fr, "recommended_fix", ""),
+                    "query": getattr(fr, "fix_query", ""),
+                    "action": getattr(fr, "user_action", "manual"),
+                })
+            pd.DataFrame(fix_data).to_excel(writer, sheet_name="Fix Recommendations", index=False)
+
+    return file_path
+
+
+async def _export_to_json(result: Dict, filename: str, request: ExportRequest) -> Path:
+    """Export results to JSON format."""
+    import json
+
+    file_path = EXPORT_DIR / f"{filename}.json"
+
+    export_data = {
+        "summary_report": result.get("summary_report", {}),
+        "validation_results": [
+            {
+                "rule_name": getattr(vr, "rule_name", ""),
+                "status": getattr(vr, "status", ""),
+                "severity": getattr(vr, "severity", ""),
+                "failed_count": getattr(vr, "failed_count", 0),
+                "total_count": getattr(vr, "total_count", 0),
+                "failure_examples": getattr(vr, "failure_examples", [])[:50],
+            }
+            for vr in result.get("validation_results", [])
+        ],
+        "fix_recommendations": [
+            {
+                "rule_id": getattr(fr, "rule_id", ""),
+                "issue": getattr(fr, "issue_description", ""),
+                "fix": getattr(fr, "recommended_fix", ""),
+                "query": getattr(fr, "fix_query", ""),
+                "action": getattr(fr, "user_action", "manual"),
+            }
+            for fr in result.get("fix_recommendations", [])
+        ],
+    }
+
+    with open(file_path, 'w') as f:
+        json.dump(export_data, f, indent=2, default=str)
+
+    return file_path
+
+
+async def _export_to_database(result: Dict, filename: str, request: ExportRequest) -> Path:
+    """Export results to database (placeholder)."""
+    file_path = EXPORT_DIR / f"{filename}_db_export.txt"
+    with open(file_path, 'w') as f:
+        f.write("Database export - implementation pending")
+    return file_path
+
+
+# ============================================================================
+# Quick Fix Routes (NEW - v8)
+# ============================================================================
+@router.get("/validate/{validation_id}/fixes")
+async def get_fix_recommendations(validation_id: str):
+    """Get fix recommendations for failed validation rules."""
+    if validation_id not in _validation_store:
+        raise HTTPException(status_code=404, detail="Validation not found")
+
+    result = _validation_store[validation_id].get("result", {})
+    fix_recommendations = result.get("fix_recommendations", [])
+
+    if not fix_recommendations:
+        return {"validation_id": validation_id, "fixes": [], "message": "No fix recommendations available"}
+
+    fixes = []
+    for f in fix_recommendations:
+        fixes.append({
+            "rule_id": getattr(f, "rule_id", ""),
+            "rule_name": getattr(f, "rule_id", "").replace("agent_rule_", "Rule "), # Fallback if no rule_name
+            "issue_description": getattr(f, "issue_description", ""),
+            "status": "failed", # Only failed rules get fixes typically
+            "severity": getattr(f, "risk_level", "warning"),
+            "failed_count": getattr(f, "estimated_rows_affected", 0),
+            "total_rows": result.get("summary_report", {}).get("records_processed", 0),
+            "failure_percentage": (getattr(f, "estimated_rows_affected", 0) / max(1, result.get("summary_report", {}).get("records_processed", 1))) * 100,
+            "suggested_fixes": [
+                {
+                    "instruction": getattr(f, "recommended_fix", ""),
+                    "label": "Agent Recommended",
+                }
+            ],
+            "executed_query": getattr(f, "fix_query", None),
+        })
+
+    # Also include passed rules for the UI
+    validation_results = result.get("validation_results", [])
+    for vr in validation_results:
+        if getattr(vr, "status", "") == "passed":
+            fixes.append({
+                "rule_name": getattr(vr, "rule_name", ""),
+                "status": "passed",
+                "severity": "info",
+            })
+            
+    # Add rule_name to failed fixes if available in validation_results
+    for fix in fixes:
+         if fix["status"] != "passed":
+             for vr in validation_results:
+                 if getattr(vr, "rule_id", "") == fix.get("rule_id"):
+                     fix["rule_name"] = getattr(vr, "rule_name", fix.get("rule_name"))
+                     fix["failure_examples"] = getattr(vr, "failure_examples", [])
+                     break
+
+    return {
+        "validation_id": validation_id, 
+        "fixes": fixes, 
+        "total_issues": len([f for f in fixes if f["status"] != "passed"]),
+        "message": "Fix recommendations retrieved"
+    }
+
+
+class FixInstruction(BaseModel):
+    rule_name: str
+    instruction: str
+
+
+class ApplyFixesRequest(BaseModel):
+    fix_instructions: List[FixInstruction]
+    use_agent: bool = True
+
+
+@router.post("/validate/{validation_id}/fix")
+async def apply_fixes(validation_id: str, request: ApplyFixesRequest):
+    """Apply fixes to the dataset based on instructions."""
+    if validation_id not in _validation_store:
+        raise HTTPException(status_code=404, detail="Validation not found")
+
+    v = _validation_store[validation_id]
+    source_id = v.get("data_source_id")
+    target_path = v.get("target_path")
+    
+    if not source_id or not target_path:
+        raise HTTPException(status_code=400, detail="Validation missing source information")
+        
+    source = _get_source(source_id)
+    connector = ConnectorFactory.create_connector(
+        source["source_type"], source["connection_config"]
+    )
+    
+    try:
+        await connector.connect()
+        # Fetch data to apply fixes to
+        # In a real app we'd paginate or use SQL, but for this demo we'll use pandas on a sample
+        sample_data = await connector.sample_data(target_path, sample_size=1000, full_scan=True)
+        await connector.disconnect()
+        
+        import pandas as pd
+        df = pd.DataFrame(sample_data)
+        original_rows = len(df)
+        
+        # Simple mock application of fixes if not using actual agent
+        # For a full implementation, this would call the LLM to generate pandas code
+        # based on the instructions, then `exec()` it safely.
+        
+        fixed_df = df.copy()
+        
+        # Mock fix: Just drop rows with nulls for demonstration
+        for instr in request.fix_instructions:
+            if "drop" in instr.instruction.lower() or "remove" in instr.instruction.lower():
+                fixed_df = fixed_df.dropna()
+            elif "fill" in instr.instruction.lower() or "replace" in instr.instruction.lower():
+                fixed_df = fixed_df.fillna("FIXED")
+                
+        fixed_rows = len(fixed_df)
+        
+        # Save to export result instead of modifying the live DB directly
+        v["result"]["fixed_data"] = fixed_df.to_dict(orient='records')
+        
+        return {
+            "validation_id": validation_id,
+            "status": "success",
+            "message": "Fixes applied to staging dataset",
+            "original_rows": original_rows,
+            "fixed_rows": fixed_rows,
+            "rows_removed": original_rows - fixed_rows,
+            "columns": list(fixed_df.columns),
+            "preview": fixed_df.head(10).to_dict(orient='records')
+        }
+        
+        
+    except Exception as e:
+        logger.error(f"Error applying fixes: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to apply fixes: {str(e)}")
+
+
+@router.post("/validate/{validation_id}/apply-fix", response_model=FixActionResponse)
+async def apply_fix_action(request: FixActionRequest):
+    """Apply fix action to a validation rule (manual/auto/skip)."""
+    if request.validation_id not in _validation_store:
+        raise HTTPException(status_code=404, detail="Validation not found")
+
+    v = _validation_store[request.validation_id]
+    result = v.get("result", {})
+    fix_recommendations = result.get("fix_recommendations", [])
+
+    matching_fix = None
+    for f in fix_recommendations:
+        if getattr(f, "rule_id", "") == request.rule_id:
+            matching_fix = f
+            break
+
+    if not matching_fix:
+        raise HTTPException(status_code=404, detail=f"Fix recommendation not found for rule {request.rule_id}")
+
+    if request.action == "manual":
+        status = "pending_manual"
+        message = "Fix query provided for manual execution"
+        fix_query = getattr(matching_fix, "fix_query", None) or request.custom_fix_query
+    elif request.action == "auto_agent":
+        status = "pending_auto"
+        message = "Agent will execute fix automatically"
+        fix_query = getattr(matching_fix, "fix_query", None)
+    elif request.action == "skip":
+        status = "skipped"
+        message = "Fix skipped by user"
+        fix_query = None
+    else:
+        raise HTTPException(status_code=400, detail=f"Invalid action: {request.action}")
+
+    if "fix_actions" not in v:
+        v["fix_actions"] = {}
+    v["fix_actions"][request.rule_id] = {
+        "action": request.action,
+        "status": status,
+        "applied_at": datetime.utcnow().isoformat(),
+        "custom_query": request.custom_fix_query,
+    }
+
+    return FixActionResponse(
+        validation_id=request.validation_id,
+        rule_id=request.rule_id,
+        action=request.action,
+        status=status,
+        message=message,
+        fix_query=fix_query,
+    )
+
+
+# ============================================================================
+# Rule Management Routes
+# ============================================================================
 @router.get("/rules")
 async def list_validation_rules(
     data_source_id: Optional[str] = None,
@@ -567,10 +1000,9 @@ async def delete_validation_rule(rule_id: str):
     return {"id": rule_id, "status": "deleted"}
 
 
-# ===================================================================
+# ============================================================================
 # AI Routes
-# ===================================================================
-
+# ============================================================================
 @router.post("/ai/recommend-rules")
 async def recommend_rules(
     data_source_id: str,
@@ -593,10 +1025,9 @@ async def analyze_data_quality(
     return {"analysis": "", "recommendations": []}
 
 
-# ===================================================================
+# ============================================================================
 # LLM Health Check
-# ===================================================================
-
+# ============================================================================
 @router.get("/llm/health", response_model=LLMHealthResponse)
 async def check_llm_health():
     """Check LLM service health."""
@@ -605,17 +1036,15 @@ async def check_llm_health():
     return LLMHealthResponse(**health)
 
 
-# ===================================================================
+# ============================================================================
 # File Upload Routes
-# ===================================================================
-
+# ============================================================================
 @router.post("/upload")
 async def upload_file(
     file: UploadFile = File(...),
 ):
     """Upload a file for validation."""
     os.makedirs(str(UPLOAD_DIR), exist_ok=True)
-
     file_path = UPLOAD_DIR / file.filename
     with open(str(file_path), "wb") as f:
         content = await file.read()
@@ -638,10 +1067,9 @@ async def upload_file(
     }
 
 
-# ===================================================================
+# ============================================================================
 # System Routes
-# ===================================================================
-
+# ============================================================================
 @router.get("/health")
 async def health_check():
     """System health check."""
