@@ -28,3 +28,27 @@ To provide an Enterprise-Grade AI-Powered Data Quality Assurance Platform that c
 - [ ] System can successfully connect, ingest schemas, and profile both structured and semi-structured data sources.
 - [ ] The LangGraph workflow successfully completes the `Connect -> Profile -> Validate -> Report` cycle without breaking.
 - [ ] The UI accurately displays validation status, scores, and specific row/column level discrepancies.
+
+## 📊 Feature: DATA EXPLORATION, SLICING & PIVOT
+*This section is ALWAYS triggered immediately after the user selects or uploads a dataset — before any validation mode, analysis type, or further configuration.*
+
+### STEP 1 — COLUMN EXPLORER (Auto-run on data load)
+Upon receiving the dataset, immediately scan and display a Column Summary Table. Detect and label each column's semantic type, not just raw dtype: `datetime`, `int`, `float`, `boolean`, `string (low-cardinality)`, `string (high-cardinality)`, `categorical (ordered)`.
+
+### STEP 2 — DYNAMIC FILTERS (Per Column, Type-Aware)
+Present a Filters Panel with one filter widget per column, auto-selected based on the detected semantic type:
+- **DATETIME**: Preset Range Dropdown or Manual Range Entry (FROM -> TO).
+- **INT / FLOAT**: Range Slider (min↔max) or Manual Entry. Checkbox Multi-Select for low uniqueness.
+- **BOOLEAN**: Toggle / Radio.
+- **STRING (Low-Cardinality)**: Multi-Select Checkbox List with unique counts.
+- **STRING (High-Cardinality)**: Search / Contains text input box with match mode toggles.
+Allow MULTI-COLUMN COMPOUND FILTER combining filters using AND / OR logic.
+
+### STEP 3 — DATA SLICE PREVIEW
+After filters are applied, show row count before vs. after filtering, preview of the first 10 rows, and column-wise null summary.
+
+### STEP 4 — PIVOT TABLE BUILDER (Optional but offered every time)
+Offer a Pivot Builder (Rows, Columns, Values, Aggregation, Sort By, Top N Filter). Display the result as a clean formatted pivot table.
+
+### TRANSITION
+Only after the user confirms that the dataset slice is acceptable and the Pivot is reviewed (if requested), proceed to Validation Mode Selection.
