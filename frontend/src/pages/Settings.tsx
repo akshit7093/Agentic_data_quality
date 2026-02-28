@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  Settings,
   Brain,
   Database,
   Shield,
@@ -26,7 +25,7 @@ interface LLMSettings {
 
 export default function SettingsPage() {
   const { data: llmHealth, refetch: refetchLLMHealth } = useLLMHealth();
-  
+
   const [activeTab, setActiveTab] = useState('llm');
   const [isTesting, setIsTesting] = useState(false);
   const [llmSettings, setLLMSettings] = useState<LLMSettings>({
@@ -76,16 +75,14 @@ export default function SettingsPage() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  activeTab === tab.id
+                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === tab.id
                     ? 'bg-primary-50 text-primary-700'
                     : 'text-gray-700 hover:bg-gray-100'
-                }`}
+                  }`}
               >
                 <tab.icon
-                  className={`w-5 h-5 mr-3 ${
-                    activeTab === tab.id ? 'text-primary-600' : 'text-gray-400'
-                  }`}
+                  className={`w-5 h-5 mr-3 ${activeTab === tab.id ? 'text-primary-600' : 'text-gray-400'
+                    }`}
                 />
                 {tab.name}
               </button>

@@ -1,4 +1,9 @@
-"""Local file connector for CSV, Excel, Parquet, JSON files."""
+"""Local file connector for CSV, Excel, Parquet, JSON files.
+
+REWRITE v5 - Updated to support the ReAct Agent architecture.
+Includes full_scan support and explicit delegation of query execution
+to the ValidationEngine's in-memory sandbox.
+"""
 import os
 import json
 import logging
@@ -22,7 +27,7 @@ class LocalFileConnector(FileConnector):
         """Resolve resource_path to a list of data files.
         
         If resource_path points to a directory, recursively find all
-        supported data files within it.  Otherwise return a single-item list.
+        supported data files within it. Otherwise return a single-item list.
         """
         file_path = self._resolve_path(resource_path)
         if os.path.isdir(file_path):
@@ -140,7 +145,7 @@ class LocalFileConnector(FileConnector):
             columns[col_name] = {
                 "type": str(dtype),
                 "pandas_type": dtype.name,
-                "nullable": df[col_name].isnull().any(),
+                "nullable": bool(df[col_name].isnull().any()),
             }
         
         return {
@@ -247,7 +252,7 @@ class LocalFileConnector(FileConnector):
         # Convert to records
         records = df.replace({pd.NA: None, pd.NaT: None}).to_dict('records')
         
-        # Clean NaN values
+        # Clean NaN values for JSON serialization
         for record in records:
             for key, val in record.items():
                 if pd.isna(val):
@@ -260,8 +265,12 @@ class LocalFileConnector(FileConnector):
         resource_path: str,
         sample_size: int = 1000,
         method: str = "random",
+        full_scan: bool = False,
     ) -> List[Dict[str, Any]]:
         """Sample data from file or directory of files."""
+        if full_scan:
+            return await self.read_data(resource_path)
+            
         # Get total row count first
         total_rows = await self.get_row_count(resource_path)
         
@@ -325,3 +334,15 @@ class LocalFileConnector(FileConnector):
             "modified_at": stat.st_mtime,
             "row_count": await self.get_row_count(resource_path),
         }
+
+    async def execute_raw_query(self, query: str, query_type: str = "sql") -> Dict[str, Any]:
+        """
+        Local files do not have a native query engine running (unlike PostgreSQL).
+        We explicitly raise NotImplementedError so the ValidationEngine intercepts 
+        this and runs the query securely in an in-memory SQLite/Pandas sandbox.
+        """
+        raise NotImplementedError(
+            "execute_raw_query is intentionally not implemented for LocalFileConnector. "
+            "The ValidationEngine will automatically catch this and use its in-memory "
+            "sandbox (SQLite/Pandas) to execute the agent's query against the local file data."
+        )

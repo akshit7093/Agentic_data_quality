@@ -17,7 +17,6 @@ import {
   RefreshCw,
   AlertCircle,
   Upload,
-  BarChart3,
   Eye,
 } from 'lucide-react';
 import { useDataSources } from '@/hooks/useDataSources';
@@ -76,7 +75,7 @@ const SOURCE_INFO: Record<string, { label: string; icon: any; color: string }> =
 
 export default function NewValidation() {
   const navigate = useNavigate();
-  const { data: dataSources, isLoading: dsLoading } = useDataSources();
+  const { data: dataSources } = useDataSources();
   const submitValidation = useSubmitValidation();
   const { data: llmHealth } = useLLMHealth();
 
@@ -221,10 +220,10 @@ export default function NewValidation() {
           <div key={s.id} className="flex items-center">
             <div
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${isActive
-                  ? 'bg-primary-100 text-primary-700'
-                  : isCompleted
-                    ? 'text-success-600'
-                    : 'text-gray-400'
+                ? 'bg-primary-100 text-primary-700'
+                : isCompleted
+                  ? 'text-success-600'
+                  : 'text-gray-400'
                 }`}
             >
               <s.icon className="w-5 h-5" />
@@ -253,8 +252,8 @@ export default function NewValidation() {
             setStep('browse');
           }}
           className={`p-6 rounded-xl border-2 text-left transition-all ${selectedDataSource === 'local-test'
-              ? 'border-primary-500 bg-primary-50'
-              : 'border-gray-200 hover:border-gray-300'
+            ? 'border-primary-500 bg-primary-50'
+            : 'border-gray-200 hover:border-gray-300'
             }`}
         >
           <div className="flex items-start space-x-4">
@@ -282,8 +281,8 @@ export default function NewValidation() {
             setStep('browse');
           }}
           className={`p-6 rounded-xl border-2 text-left transition-all ${selectedDataSource === 'file-upload'
-              ? 'border-primary-500 bg-primary-50'
-              : 'border-gray-200 hover:border-gray-300'
+            ? 'border-primary-500 bg-primary-50'
+            : 'border-gray-200 hover:border-gray-300'
             }`}
         >
           <div className="flex items-start space-x-4">
@@ -310,8 +309,8 @@ export default function NewValidation() {
             setStep('browse');
           }}
           className={`p-6 rounded-xl border-2 text-left transition-all ${selectedDataSource === 'adls-mock'
-              ? 'border-primary-500 bg-primary-50'
-              : 'border-gray-200 hover:border-gray-300'
+            ? 'border-primary-500 bg-primary-50'
+            : 'border-gray-200 hover:border-gray-300'
             }`}
         >
           <div className="flex items-start space-x-4">
@@ -339,8 +338,8 @@ export default function NewValidation() {
             setStep('browse');
           }}
           className={`p-6 rounded-xl border-2 text-left transition-all ${selectedDataSource === 'local-files'
-              ? 'border-primary-500 bg-primary-50'
-              : 'border-gray-200 hover:border-gray-300'
+            ? 'border-primary-500 bg-primary-50'
+            : 'border-gray-200 hover:border-gray-300'
             }`}
         >
           <div className="flex items-start space-x-4">
@@ -371,8 +370,8 @@ export default function NewValidation() {
                 setStep('browse');
               }}
               className={`p-6 rounded-xl border-2 text-left transition-all ${selectedDataSource === ds.id
-                  ? 'border-primary-500 bg-primary-50'
-                  : 'border-gray-200 hover:border-gray-300'
+                ? 'border-primary-500 bg-primary-50'
+                : 'border-gray-200 hover:border-gray-300'
                 }`}
             >
               <div className="flex items-start space-x-4">
@@ -695,8 +694,8 @@ export default function NewValidation() {
             <label
               key={mode.id}
               className={`flex items-start p-4 border-2 rounded-xl cursor-pointer transition-all ${validationMode === mode.id
-                  ? 'border-primary-500 bg-primary-50'
-                  : 'border-gray-200 hover:border-gray-300'
+                ? 'border-primary-500 bg-primary-50'
+                : 'border-gray-200 hover:border-gray-300'
                 }`}
             >
               <input

@@ -1,0 +1,11 @@
+quality_score,total_rules,passed_rules,failed_rules,warning_rules,agent_narrative,data_source,records_processed,rule_breakdown,data_accuracy
+0.0,0,0,0,0,"Summary of findings (counts will be computed from actual results, not this text):
+- payment_method IS NULL: 0 failures
+- payment_status IS NULL: 0 failures 
+- transaction_amount IS NULL: 0 failures
+- fraud_score IS NULL: 0 failures
+- transaction_date IS NULL: 0 failures
+- transaction_amount < 0: 0 failures
+- fraud_score > 1.0: 0 failures
+
+All validation checks passed with no failed rows identified in the single sample row.",sales_transactions,1,[],sample

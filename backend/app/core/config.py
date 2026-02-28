@@ -8,9 +8,13 @@ from pydantic import Field
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
+    # # App Settings
+    # APP_NAME: str = "AI Data Quality Agent"
+    # APP_VERSION: str = "1.0.0"
+    # DEBUG: bool = Field(default=False, env="DEBUG")
     # App Settings
     APP_NAME: str = "AI Data Quality Agent"
-    APP_VERSION: str = "1.0.0"
+    APP_VERSION: str = "1.0.2"  # ← bumped
     DEBUG: bool = Field(default=False, env="DEBUG")
     
     # API Settings
@@ -54,9 +58,17 @@ class Settings(BaseSettings):
     # Vector Database
     VECTOR_DB_PATH: str = Field(default="./chroma_db", env="VECTOR_DB_PATH")
     
-    # Validation Settings
+    # # Validation Settings
+    # MAX_SAMPLE_SIZE: int = 10000
+    # DEFAULT_SAMPLE_SIZE: int = 1000
+    # MAX_CONTEXT_TOKENS: int = 128000
+
+    # Validation Settings ← NEW FULL-SCAN SECTION
     MAX_SAMPLE_SIZE: int = 10000
     DEFAULT_SAMPLE_SIZE: int = 1000
+    MAX_FULL_SCAN_ROWS: int = 50000          # ← safety limit
+    DEFAULT_FULL_SCAN: bool = False
+    FULL_SCAN_WARNING_THRESHOLD: int = 10000 # warn user above this
     MAX_CONTEXT_TOKENS: int = 128000
     
     # Azure Settings

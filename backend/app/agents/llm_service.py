@@ -1,12 +1,13 @@
 """LLM service supporting Ollama, LM Studio, and cloud providers.
 
-FIXED VERSION - Corrected JSON extraction for Python compatibility.
+REWRITE v5 - Optimized for ReAct Agent architecture.
+Supports expanded context windows and enhanced logging for agentic tracing.
 """
 import json
 import logging
 import re
 from typing import List, Dict, Any, Optional, AsyncGenerator
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
@@ -23,7 +24,6 @@ class LLMService:
     def __init__(self):
         self.settings = get_settings()
         self._llm: Optional[BaseChatModel] = None
-        self._embedding_model = None
 
     @property
     def llm(self) -> BaseChatModel:
@@ -36,13 +36,14 @@ class LLMService:
         """Create LLM instance based on configuration."""
         provider = self.settings.LLM_PROVIDER.strip().lower()
         
+        # INCREASED context sizes for ReAct loops which consume many tokens
         if provider == "ollama":
             logger.info(f"Initializing Ollama LLM with model: {self.settings.OLLAMA_MODEL}")
             return ChatOllama(
                 model=self.settings.OLLAMA_MODEL.strip(),
                 base_url=self.settings.OLLAMA_BASE_URL.strip(),
                 temperature=0.1,
-                num_ctx=8192,
+                num_ctx=16384,  # Expanded for agentic memory
             )
         
         elif provider == "lmstudio":
@@ -52,7 +53,7 @@ class LLMService:
                 base_url=self.settings.LMSTUDIO_BASE_URL.strip(),
                 api_key=self.settings.LMSTUDIO_API_KEY or "not-needed",
                 temperature=0.1,
-                max_tokens=4096,
+                max_tokens=8192, # Expanded for <REPORT> and <METADATA> generation
             )
         
         elif provider == "openai":
@@ -63,6 +64,7 @@ class LLMService:
                 model=self.settings.OPENAI_MODEL.strip(),
                 api_key=self.settings.OPENAI_API_KEY.strip(),
                 temperature=0.1,
+                max_tokens=4096,
             )
         
         elif provider == "anthropic":
@@ -73,6 +75,7 @@ class LLMService:
                 model=self.settings.ANTHROPIC_MODEL.strip(),
                 api_key=self.settings.ANTHROPIC_API_KEY.strip(),
                 temperature=0.1,
+                max_tokens=4096,
             )
         
         else:
@@ -83,14 +86,30 @@ class LLMService:
         self,
         prompt: str,
         system_prompt: Optional[str] = None,
+        chat_history: Optional[List[Dict[str, str]]] = None,
         temperature: float = 0.1,
         max_tokens: Optional[int] = None,
     ) -> str:
-        """Generate text from LLM."""
+        """
+        Generate text from LLM.
+        Supports native chat history injection for advanced agentic memory.
+        """
         messages = []
         
         if system_prompt:
             messages.append(SystemMessage(content=system_prompt.strip()))
+        
+        # Optionally pass native LangChain chat history instead of stringifying
+        if chat_history:
+            for msg in chat_history:
+                role = msg.get("role", "").lower()
+                content = msg.get("content", "")
+                if role == "user":
+                    messages.append(HumanMessage(content=content))
+                elif role == "assistant":
+                    messages.append(AIMessage(content=content))
+                elif role == "system":
+                    messages.append(SystemMessage(content=content))
         
         messages.append(HumanMessage(content=prompt.strip()))
         
@@ -111,7 +130,6 @@ class LLMService:
         system_prompt: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Generate structured JSON output from LLM with ROBUST parsing."""
-        # Enhanced system prompt with strict JSON instructions
         json_system_prompt = """You are a data quality expert AI. ALWAYS respond with VALID JSON ONLY.
 - NO explanatory text before or after the JSON
 - NO markdown code blocks (```json or ```)
@@ -135,11 +153,8 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
         # Get raw LLM response
         response = await self.generate(full_prompt, json_system_prompt)
         
-        # ✅ DEBUG: Log the raw response for troubleshooting
         logger.info(f"🔵 RAW LLM RESPONSE (first 500 chars):\n{response[:500]}")
-        logger.debug(f"🔵 FULL LLM RESPONSE:\n{response}")
         
-        # CRITICAL FIX: Robust JSON extraction with multiple fallback strategies
         parsed_json = self._extract_json(response)
         
         if parsed_json is None:
@@ -151,9 +166,8 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
             logger.error(f"❌ {error_msg}")
             raise ValueError(error_msg)
         
-        # ✅ Log successful parsing
-        rule_count = len(parsed_json.get('rules', []))
-        logger.info(f"✅ Successfully parsed JSON with {rule_count} rules from LLM response")
+        rule_count = len(parsed_json.get('rules', [])) if isinstance(parsed_json, dict) else 0
+        logger.info(f"✅ Successfully parsed JSON from LLM response")
         
         return parsed_json
 
@@ -178,7 +192,7 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
             try:
                 result = strategy_fn(text)
                 if result is not None:
-                    logger.info(f"✅ JSON extraction succeeded using strategy: {strategy_name}")
+                    logger.debug(f"✅ JSON extraction succeeded using strategy: {strategy_name}")
                     return result
             except Exception as e:
                 logger.debug(f"Strategy '{strategy_name}' failed: {str(e)}")
@@ -193,16 +207,11 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
         return json.loads(cleaned)
 
     def _try_outermost_braces(self, text: str) -> Optional[Dict[str, Any]]:
-        """
-        Extract content between outermost { } braces.
-        ✅ FIXED: Uses balanced brace counting instead of unsupported (?R) regex.
-        """
-        # Find the first opening brace
+        """Extract content between outermost { } braces."""
         start = text.find('{')
         if start == -1:
             return None
         
-        # Use a stack to find the matching closing brace
         brace_count = 0
         end = -1
         
@@ -216,23 +225,17 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
                     break
         
         if end == -1:
-            logger.debug("Unbalanced braces - no matching closing brace found")
             return None
         
         candidate = text[start:end + 1]
         
         try:
             return json.loads(candidate)
-        except json.JSONDecodeError as e:
-            logger.debug(f"Balanced brace extraction failed JSON parse: {e}")
+        except json.JSONDecodeError:
             return None
 
     def _try_code_block_extraction(self, text: str) -> Optional[Dict[str, Any]]:
-        """
-        Extract JSON from markdown code blocks.
-        ✅ FIXED: Handles multi-line content properly.
-        """
-        # Try ```json block first (greedy match for nested content)
+        """Extract JSON from markdown code blocks."""
         match = re.search(r'```json\s*([\s\S]*?)\s*```', text, re.IGNORECASE)
         if match:
             content = match.group(1).strip()
@@ -241,11 +244,9 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
             except json.JSONDecodeError:
                 pass
         
-        # Try generic ``` block
         match = re.search(r'```\s*([\s\S]*?)\s*```', text)
         if match:
             content = match.group(1).strip()
-            # Check if it looks like JSON
             if content.startswith('{') or content.startswith('['):
                 try:
                     return json.loads(content)
@@ -263,18 +264,14 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
         
         for line in lines:
             stripped = line.strip()
-            
-            # Count braces to track nesting
             brace_count += stripped.count('{') - stripped.count('}')
             
-            # Start capturing when we see opening brace
             if '{' in stripped and not in_json:
                 in_json = True
             
             if in_json:
                 json_lines.append(line)
             
-            # Stop when braces are balanced and we're at the end
             if in_json and brace_count == 0:
                 break
         
@@ -288,10 +285,7 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
         return None
 
     def _try_aggressive_cleanup(self, text: str) -> Optional[Dict[str, Any]]:
-        """
-        Last resort: aggressive cleanup of common LLM artifacts.
-        """
-        # Remove common prefixes
+        """Last resort: aggressive cleanup of common LLM artifacts."""
         prefixes_to_remove = [
             r'^Here\'s the JSON:?\s*',
             r'^Here is the JSON:?\s*',
@@ -308,14 +302,11 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
         for prefix_pattern in prefixes_to_remove:
             cleaned = re.sub(prefix_pattern, '', cleaned, flags=re.IGNORECASE)
         
-        # Remove trailing code blocks and extra text
         cleaned = re.sub(r'```$', '', cleaned.strip())
         cleaned = re.sub(r'\s*```\s*$', '', cleaned)
         
-        # Find the JSON object
         start = cleaned.find('{')
         if start != -1:
-            # Use balanced brace counting
             brace_count = 0
             end = -1
             for i in range(start, len(cleaned)):

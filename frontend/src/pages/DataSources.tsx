@@ -2,14 +2,10 @@ import { useState } from 'react';
 import {
   Database,
   Plus,
-  Edit2,
   Trash2,
-  CheckCircle,
-  XCircle,
   RefreshCw,
   ChevronDown,
   ChevronRight,
-  Folder,
   File,
 } from 'lucide-react';
 import { useDataSources, useCreateDataSource, useDeleteDataSource, useTestConnection } from '@/hooks/useDataSources';

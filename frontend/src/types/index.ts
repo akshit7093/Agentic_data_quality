@@ -52,6 +52,7 @@ export interface ValidationRun {
   completed_at?: string;
   error_message?: string;
   results?: ValidationResult[];
+  result?: any; // Contains raw agent state including messages
   data_profile?: DataProfile;
 }
 

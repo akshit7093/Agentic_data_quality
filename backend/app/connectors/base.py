@@ -1,4 +1,7 @@
-"""Base connector interface for all data sources."""
+"""Base connector interface for all data sources.
+
+REWRITE v5 - Added execute_raw_query for ReAct Agent architecture support.
+"""
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
@@ -109,6 +112,7 @@ class BaseConnector(ABC):
         resource_path: str,
         sample_size: int = 1000,
         method: str = "random",
+        full_scan: bool = False,
     ) -> List[Dict[str, Any]]:
         """Sample data from resource.
         
@@ -116,10 +120,13 @@ class BaseConnector(ABC):
             resource_path: Path to the resource.
             sample_size: Number of rows to sample.
             method: Sampling method (random, first, last).
+            full_scan: If True, bypasses sampling and returns all data.
             
         Returns:
             List of sampled row dictionaries.
         """
+        if full_scan:
+            return await self.read_data(resource_path, limit=None)
         pass
     
     @abstractmethod
@@ -145,6 +152,24 @@ class BaseConnector(ABC):
             Metadata dictionary.
         """
         pass
+
+    async def execute_raw_query(self, query: str, query_type: str = "sql") -> Dict[str, Any]:
+        """Execute a raw query directly against the data source.
+        
+        This is the native pushdown method for ReAct agents. If a connector does not 
+        override this, the system will fall back to in-memory execution via the ValidationEngine.
+        
+        Args:
+            query: The raw query string to execute.
+            query_type: The dialect of the query (e.g., 'sql', 'pandas').
+            
+        Returns:
+            Dict containing 'status', 'row_count', 'sample_rows', etc.
+        """
+        raise NotImplementedError(
+            f"execute_raw_query is not natively implemented for {self.__class__.__name__}. "
+            "The ValidationEngine will use its in-memory fallback."
+        )
     
     async def test_connection(self) -> Dict[str, Any]:
         """Test connection to data source.

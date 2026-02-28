@@ -4,7 +4,6 @@ import {
   Edit2,
   Trash2,
   Search,
-  Filter,
   ListChecks,
   Brain,
   Code,
@@ -181,11 +180,10 @@ export default function Rules() {
               <div className="flex items-start justify-between">
                 <div className="flex items-start space-x-3">
                   <div
-                    className={`p-2 rounded-lg ${
-                      rule.is_ai_generated
+                    className={`p-2 rounded-lg ${rule.is_ai_generated
                         ? 'bg-purple-100 text-purple-600'
                         : 'bg-gray-100 text-gray-600'
-                    }`}
+                      }`}
                   >
                     {rule.is_ai_generated ? (
                       <Brain className="w-5 h-5" />
@@ -234,7 +232,7 @@ export default function Rules() {
                     <Edit2 className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => {}}
+                    onClick={() => { }}
                     className="p-2 text-gray-400 hover:text-danger-600 hover:bg-danger-50 rounded-lg transition-colors"
                   >
                     <Trash2 className="w-4 h-4" />

@@ -1,4 +1,8 @@
-"""PostgreSQL and SQL database connector."""
+"""PostgreSQL and SQL database connector.
+
+REWRITE v5 - Added execute_raw_query for native SQL pushdown 
+to support the autonomous ReAct agent architecture.
+"""
 import logging
 from typing import Dict, Any, List, Optional
 import asyncio
@@ -212,8 +216,12 @@ class PostgreSQLConnector(BaseConnector):
         resource_path: str,
         sample_size: int = 1000,
         method: str = "random",
+        full_scan: bool = False
     ) -> List[Dict[str, Any]]:
         """Sample data from table."""
+        if full_scan:
+            return await self.read_data(resource_path, limit=None)
+            
         if not self._engine:
             raise RuntimeError("Not connected to database")
         
@@ -298,3 +306,68 @@ class PostgreSQLConnector(BaseConnector):
             "row_count": row_count,
             "primary_keys": schema['primary_keys'],
         }
+
+    async def execute_raw_query(self, query: str, query_type: str = "sql") -> Dict[str, Any]:
+        """
+        Natively execute an LLM-generated raw SQL query against the connected database.
+        
+        Args:
+            query: The raw query string to execute.
+            query_type: Must be 'sql' for this connector.
+            
+        Returns:
+            Dict containing execution status, row counts, and sample row data.
+        """
+        if query_type.lower() != "sql":
+            return {
+                "status": "error",
+                "error": f"PostgreSQLConnector only supports 'sql' query_type, received '{query_type}'."
+            }
+
+        if not self._engine:
+            return {
+                "status": "error",
+                "error": "Not connected to database."
+            }
+
+        try:
+            logger.info(f"Natively executing raw SQL query: {query}")
+            with self._engine.connect() as conn:
+                # Using a transaction block ensures read-only safety can be managed if needed later
+                result = conn.execute(text(query))
+                
+                if result.returns_rows:
+                    # Fetch all rows to get the accurate count, but only return a small subset
+                    all_rows = [dict(row._mapping) for row in result.fetchall()]
+                    row_count = len(all_rows)
+                    
+                    # Serialize complex types (like datetimes/UUIDs) to string for JSON safety
+                    sample_rows = []
+                    for row in all_rows[:5]:  # Return top 5 to LLM to save tokens
+                        clean_row = {}
+                        for k, v in row.items():
+                            if v is None:
+                                clean_row[k] = None
+                            else:
+                                clean_row[k] = str(v)
+                        sample_rows.append(clean_row)
+                        
+                    return {
+                        "status": "success",
+                        "row_count": row_count,
+                        "sample_rows": sample_rows
+                    }
+                else:
+                    return {
+                        "status": "success",
+                        "row_count": result.rowcount,
+                        "sample_rows": [],
+                        "message": "Query executed successfully but returned no rows."
+                    }
+                    
+        except Exception as e:
+            logger.error(f"Native raw query execution failed: {str(e)}")
+            return {
+                "status": "error",
+                "error": str(e)
+            }

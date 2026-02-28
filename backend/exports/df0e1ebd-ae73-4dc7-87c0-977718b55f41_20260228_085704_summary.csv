@@ -1,0 +1,7 @@
+quality_score,total_rules,passed_rules,failed_rules,warning_rules,agent_narrative,data_source,records_processed,rule_breakdown,data_accuracy
+100.0,2,2,0,0,"Summary of findings (counts will be computed from actual results):
+1. No critical issues detected across all defined quality rules examined.
+2. All checks passed successfully for the single record in the dataset.
+3. Based on available data and analysis, no immediate concerns requiring action have been identified.
+
+Given the current state of validation with only one row available for assessment, further detailed exploration would require additional context about expected data characteristics or business-specific requirements to guide further validation efforts effectively.",sales_transactions,1,"[{'rule_name': 'MissingPaymentInfoOrFraudScore', 'status': 'passed', 'failed_count': 0, 'total_count': 1, 'failure_percentage': 0.0, 'severity': 'critical', 'query': 'SELECT * FROM sales_transactions WHERE payment_method IS NULL OR transaction_amount IS NULL OR fraud_score IS NULL'}, {'rule_name': 'ZeroTransactionAmountOrHighFraudScore', 'status': 'passed', 'failed_count': 0, 'total_count': 1, 'failure_percentage': 0.0, 'severity': 'critical', 'query': 'SELECT * FROM sales_transactions WHERE transaction_amount = 0 OR fraud_score > 100'}]",sample

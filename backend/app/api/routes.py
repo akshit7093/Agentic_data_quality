@@ -20,6 +20,7 @@ from app.agents.data_quality_agent import get_data_quality_agent
 from app.agents.llm_service import get_llm_service
 from app.agents.rag_service import get_rag_service
 from app.connectors.factory import ConnectorFactory
+from app.agents.ticketing_agent import TicketingAgent
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -850,6 +851,48 @@ class FixInstruction(BaseModel):
 class ApplyFixesRequest(BaseModel):
     fix_instructions: List[FixInstruction]
     use_agent: bool = True
+
+class TicketRequest(BaseModel):
+    rule_name: str
+
+@router.post("/validate/{validation_id}/ticket")
+async def generate_ticket(validation_id: str, request: TicketRequest):
+    """Generate a markdown ticket for manual data errors via the TicketingAgent."""
+    if validation_id not in _validation_store:
+        raise HTTPException(status_code=404, detail="Validation not found")
+        
+    v = _validation_store[validation_id]
+    result = v.get("result", {})
+    results = result.get("results", [])
+    
+    # Find the rule details
+    rule_details = None
+    failure_examples = []
+    
+    for r in results:
+        if r.get("rule_name") == request.rule_name:
+            rule_details = r
+            failure_examples = r.get("failure_examples", [])
+            break
+            
+    if not rule_details:
+        raise HTTPException(status_code=404, detail=f"Rule {request.rule_name} not found in validation results")
+        
+    schema = v.get("schema", {})
+    
+    try:
+        agent = TicketingAgent()
+        ticket_md = await agent.generate_ticket(
+            rule_name=request.rule_name,
+            rule_details=rule_details,
+            schema=schema,
+            failure_examples=failure_examples
+        )
+        return {"status": "success", "ticket_markdown": ticket_md}
+    except Exception as e:
+        logger.error(f"Error generating ticket: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to generate ticket: {str(e)}")
+
 
 
 @router.post("/validate/{validation_id}/fix")

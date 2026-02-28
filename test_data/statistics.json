@@ -1,57 +1,48 @@
 {
+  "generated_at": "2026-02-26T18:33:44.071577",
   "tables": {
     "customers": {
       "row_count": 1000,
       "columns": [
         {
           "name": "customer_id",
-          "type": "INTEGER",
-          "nullable": true
+          "type": "INTEGER"
         },
         {
           "name": "email",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "first_name",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "last_name",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "phone",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "date_of_birth",
-          "type": "DATE",
-          "nullable": true
+          "type": "DATE"
         },
         {
           "name": "country",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "created_at",
-          "type": "TIMESTAMP",
-          "nullable": true
+          "type": "TIMESTAMP"
         },
         {
           "name": "status",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "lifetime_value",
-          "type": "REAL",
-          "nullable": true
+          "type": "REAL"
         }
       ]
     },
@@ -60,53 +51,43 @@
       "columns": [
         {
           "name": "order_id",
-          "type": "INTEGER",
-          "nullable": true
+          "type": "INTEGER"
         },
         {
           "name": "customer_id",
-          "type": "INTEGER",
-          "nullable": true
+          "type": "INTEGER"
         },
         {
           "name": "product_id",
-          "type": "INTEGER",
-          "nullable": true
+          "type": "INTEGER"
         },
         {
           "name": "quantity",
-          "type": "INTEGER",
-          "nullable": true
+          "type": "INTEGER"
         },
         {
           "name": "unit_price",
-          "type": "REAL",
-          "nullable": true
+          "type": "REAL"
         },
         {
           "name": "total_amount",
-          "type": "REAL",
-          "nullable": true
+          "type": "REAL"
         },
         {
           "name": "order_date",
-          "type": "TIMESTAMP",
-          "nullable": true
+          "type": "TIMESTAMP"
         },
         {
           "name": "shipping_address",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "status",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "discount_code",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         }
       ]
     },
@@ -115,48 +96,39 @@
       "columns": [
         {
           "name": "product_id",
-          "type": "INTEGER",
-          "nullable": true
+          "type": "INTEGER"
         },
         {
           "name": "product_name",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "category",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "price",
-          "type": "REAL",
-          "nullable": true
+          "type": "REAL"
         },
         {
           "name": "cost",
-          "type": "REAL",
-          "nullable": true
+          "type": "REAL"
         },
         {
           "name": "stock_quantity",
-          "type": "INTEGER",
-          "nullable": true
+          "type": "INTEGER"
         },
         {
           "name": "supplier_id",
-          "type": "INTEGER",
-          "nullable": true
+          "type": "INTEGER"
         },
         {
           "name": "created_at",
-          "type": "TIMESTAMP",
-          "nullable": true
+          "type": "TIMESTAMP"
         },
         {
           "name": "is_active",
-          "type": "BOOLEAN",
-          "nullable": true
+          "type": "BOOLEAN"
         }
       ]
     },
@@ -165,43 +137,35 @@
       "columns": [
         {
           "name": "transaction_id",
-          "type": "INTEGER",
-          "nullable": true
+          "type": "INTEGER"
         },
         {
           "name": "order_id",
-          "type": "INTEGER",
-          "nullable": true
+          "type": "INTEGER"
         },
         {
           "name": "payment_method",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "payment_status",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "transaction_amount",
-          "type": "REAL",
-          "nullable": true
+          "type": "REAL"
         },
         {
           "name": "transaction_date",
-          "type": "TIMESTAMP",
-          "nullable": true
+          "type": "TIMESTAMP"
         },
         {
           "name": "currency",
-          "type": "TEXT",
-          "nullable": true
+          "type": "TEXT"
         },
         {
           "name": "fraud_score",
-          "type": "REAL",
-          "nullable": true
+          "type": "REAL"
         }
       ]
     }

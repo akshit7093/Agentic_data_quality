@@ -17,15 +17,10 @@ class ConnectorFactory:
         "json": LocalFileConnector,
         "postgresql": PostgreSQLConnector,
         "postgres": PostgreSQLConnector,
-        "mysql": PostgreSQLConnector,  # Can use same connector with different dialect
+        "mysql": PostgreSQLConnector,
         "sqlite": SQLiteConnector,
-        # Additional connectors can be registered here
-        # "adls_gen2": ADLSGen2Connector,
-        # "databricks": DatabricksConnector,
-        # "aws_s3": S3Connector,
-        # "gcp_storage": GCPStorageConnector,
     }
-    
+
     @classmethod
     def register_connector(cls, source_type: str, connector_class: Type[BaseConnector]) -> None:
         """Register a new connector type.
@@ -35,7 +30,7 @@ class ConnectorFactory:
             connector_class: The connector class to register.
         """
         cls._connectors[source_type] = connector_class
-    
+
     @classmethod
     def create_connector(cls, source_type: str, connection_config: Dict[str, Any]) -> BaseConnector:
         """Create a connector instance.
@@ -60,7 +55,7 @@ class ConnectorFactory:
         
         connector_class = cls._connectors[source_type]
         return connector_class(connection_config)
-    
+
     @classmethod
     def get_supported_types(cls) -> list:
         """Get list of supported source types.
@@ -69,7 +64,7 @@ class ConnectorFactory:
             List of supported source type strings.
         """
         return list(cls._connectors.keys())
-    
+
     @classmethod
     def is_supported(cls, source_type: str) -> bool:
         """Check if a source type is supported.

@@ -13,7 +13,7 @@ import {
   Clock,
   Inbox,
 } from 'lucide-react';
-import { useValidations, useSubmitValidation, useRecommendRules } from '@/hooks/useValidations';
+import { useValidations, useSubmitValidation } from '@/hooks/useValidations';
 import { useDataSources } from '@/hooks/useDataSources';
 import Modal from '@/components/Modal';
 
@@ -22,6 +22,7 @@ interface ValidationFormData {
   target_path: string;
   validation_mode: 'custom_rules' | 'ai_recommended' | 'hybrid';
   sample_size: number;
+  full_scan?: boolean;
 }
 
 export default function Validations() {
@@ -29,7 +30,6 @@ export default function Validations() {
   const { data: dataSources } = useDataSources();
   const { data: validations, isLoading: validationsLoading } = useValidations();
   const submitValidation = useSubmitValidation();
-  const recommendRules = useRecommendRules();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [formData, setFormData] = useState<ValidationFormData>({
@@ -405,6 +405,27 @@ export default function Validations() {
             <p className="text-xs text-gray-500 mt-1">
               Number of rows to sample for validation (100 - 100,000)
             </p>
+          </div>
+
+          <div className="flex items-center space-x-2 mt-4">
+            <input
+              type="checkbox"
+              id="full_scan"
+              className="form-checkbox h-4 w-4 text-primary-600 rounded border-gray-300 focus:ring-primary-500"
+              checked={formData.full_scan}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  full_scan: e.target.checked,
+                })
+              }
+            />
+            <label htmlFor="full_scan" className="text-sm font-medium text-gray-900">
+              Enable Full Scan (SQL Push-down)
+            </label>
+          </div>
+          <div className="text-xs text-gray-500 ml-6 pb-2">
+            If enabled on supported database targets, runs computations directly in SQL instead of in-memory pandas to avoid RAM limits.
           </div>
 
           <div className="flex justify-end space-x-3 pt-4">

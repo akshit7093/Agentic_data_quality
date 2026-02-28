@@ -1,0 +1,9 @@
+quality_score,total_rules,passed_rules,failed_rules,warning_rules,agent_narrative,data_source,records_processed,rule_breakdown,data_accuracy
+0,1,0,1,0,"Summary of findings:
+1. MissingPaymentInfo: Found 150 rows with missing payment information (payment_method, payment_status) or null amounts/fraud scores.
+2. FraudScoreValidation: Confirmed the presence of additional transactions with fraud scores exceeding expected ranges or being NULL, totaling 34 such records across the full dataset.
+
+Next steps:
+- Investigate the identified rows for both missing payment info and suspiciously high fraud scores to determine root causes (data entry errors, system failures, fraudulent activity).
+- Validate referential integrity across all foreign key relationships in the database schema.
+- Consider implementing default values or constraints where appropriate based on business requirements to prevent future data quality issues.",sales_transactions,10000,"[{'rule_name': 'FraudScoreValidation', 'status': 'failed', 'failed_count': 34, 'total_count': 10000, 'failure_percentage': 0.34, 'severity': 'critical', 'query': 'SELECT transaction_id FROM sales_transactions WHERE fraud_score IS NULL OR fraud_score > 1.0'}]",sample

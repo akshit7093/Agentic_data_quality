@@ -1,11 +1,9 @@
-import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Database,
   ClipboardCheck,
   ListChecks,
   TrendingUp,
-  TrendingDown,
   Activity,
   CheckCircle,
   XCircle,
@@ -184,9 +182,8 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="flex items-center p-4 bg-gray-50 rounded-lg">
               <div
-                className={`w-3 h-3 rounded-full mr-3 ${
-                  systemHealth?.status === 'healthy' ? 'bg-success-500' : 'bg-danger-500'
-                }`}
+                className={`w-3 h-3 rounded-full mr-3 ${systemHealth?.status === 'healthy' ? 'bg-success-500' : 'bg-danger-500'
+                  }`}
               />
               <div>
                 <p className="text-sm font-medium text-gray-900">API Server</p>
@@ -196,9 +193,8 @@ export default function Dashboard() {
 
             <div className="flex items-center p-4 bg-gray-50 rounded-lg">
               <div
-                className={`w-3 h-3 rounded-full mr-3 ${
-                  llmHealth?.status === 'healthy' ? 'bg-success-500' : 'bg-danger-500'
-                }`}
+                className={`w-3 h-3 rounded-full mr-3 ${llmHealth?.status === 'healthy' ? 'bg-success-500' : 'bg-danger-500'
+                  }`}
               />
               <div>
                 <p className="text-sm font-medium text-gray-900">LLM Service</p>

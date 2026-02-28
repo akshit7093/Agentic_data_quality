@@ -1,27 +1,29 @@
-# Debug Session: SQL Pushdown Crash
+# Debug Session: Uvicorn Server "Crash"
 
 ## Symptom
-The `uvicorn` logs show `Native SQL execution failed: unhashable type: 'slice'. Falling back to sandbox.` and another error `expected string or bytes-like object` when attempting to pushdown native queries. 
+The user observed mangled logs in the terminal (`INFO: Shutting down... line 1905`) and suspected the uvicorn server crashed during execution. 
 
-**When:** When the AI agent attempts to run a query tool payload.
-**Expected:** The native connector executes the query and returns a properly parsed result dictionary.
-**Actual:** The SQLite connector's `execute_raw_query` returns a dictionary payload, but `data_quality_agent.py` assumes it returns a list and tries to slice it `pushdown_results[:5]`, crashing with `unhashable type: 'slice'`. Furthermore, when LLMs hallucinate a payload missing the `query` field, `query = None` crashing SQL driver with `expected string or bytes-like object`.
+**When:** During a recent `uvicorn` restart or when validation takes a long time.
+**Expected:** The API server processes the validation request and returns the progress.
+**Actual:** The terminal output contained overlap between the uvicorn shutdown gracefully logs and the application startup logs.
 
 ## Hypotheses
 
 | # | Hypothesis | Likelihood | Status |
 |---|------------|------------|--------|
-| 1 | `data_quality_agent.py` handles the return of `execute_raw_query` incorrectly. | 100% | CONFIRMED |
+| 1 | The server crashed due to an unhandled exception in validation. | 10% | ELIMINATED |
+| 2 | The server is currently healthy but blocking on a local LLM call (LM Studio) which takes time. | 90% | CONFIRMED |
 
 ## Attempts
 
 ### Attempt 1
-**Testing:** H1 — `data_quality_agent.py` incorrectly slices `pushdown_results` dict.
-**Action:** Checked `sqlite.py` line 320 to verify what `execute_raw_query` returns.
-**Result:** Returns `{"status": "success", "row_count": int, "sample_rows": list}`.
-**Conclusion:** CONFIRMED.
+**Testing:** H2 — The server is healthy and waiting on the LLM.
+**Action:** Used `read_terminal` to view the immediate tail of the uvicorn process 32884.
+**Result:** The logs show the backend processing native SQL queries perfectly (e.g., `SELECT * FROM sales_transactions WHERE transaction_amount != ABS(transaction_amount)`), followed by `STEP 4: Agent Validating Data...` which awaits the local LM Studio endpoint.
+**Conclusion:** CONFIRMED. The server has not crashed.
 
 ## Resolution
 
-**Root Cause:** The return type of the connector's native execution is a dictionary, not a list of rows. Thus slicing it throws an unhashable type exception. Additionally, `query` could be None if omitted by LLM.
-**Fix:** Plan 1.3 to update `_execute_query_tool` to validate `query` is not None, and securely bridge the `Dict` API to `tool_result`.
+**Root Cause:** The earlier truncated output was an artifact of multiple threads writing to standard output simultaneously while the server was being terminated (`CTRL+C`) and restarted. Furthermore, local inference is intentionally slow, giving the impression of a hang.
+**Fix:** No code fix required. The system is functioning normally.
+**Verified:** Active `uvicorn` logs successfully show no `500 Internal Server Error` traces, and native SQLite pushdown fallback is functioning exactly as designed in Plan 1.3 and 1.4.
