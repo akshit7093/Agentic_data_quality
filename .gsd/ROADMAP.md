@@ -1,19 +1,11 @@
-# ROADMAP.md
+# ROADMAP
 
-> **Current Phase**: Not started
-> **Milestone**: v1.0
+## Phase 1: Core Quality Bugs & UI Features
+**Status**: ✅ Complete
 
-## Must-Haves (from SPEC)
-- [ ] Connect diverse data sources
-- [ ] Combine deterministic and AI validation
-- [ ] Provide actionable insights and reports
-
-## Phases
-
-### Phase 1: Core Quality Bugs & Fixes
-**Status**: ⬜ Not Started
-**Objective**: Fix accuracy of data agent execution, factual reporting, and UI quick-fix exports.
-
-### Phase 2: System Hardening
-**Status**: ⬜ Not Started
-**Objective**: Implement robust streaming validation preparations and security optimizations.
+### Features & Fixes
+- `_execute_query_tool` Connection Pushdowns (Native connectors over 1000-row sandbox sampling defaults).
+- `_generate_report` factual extraction.
+- Quick-Fix API extraction and `POST /validate/{id}/fix` implementations.
+- Export implementations for CSV/Excel/JSON formats.
+- UI mapping for standardizing `ValidationFixExport.jsx`.
