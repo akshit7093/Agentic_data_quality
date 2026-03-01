@@ -54,6 +54,7 @@ export interface ValidationRun {
   results?: ValidationResult[];
   result?: any; // Contains raw agent state including messages
   data_profile?: DataProfile;
+  slice_filters?: Record<string, any>;
 }
 
 export interface DataProfile {

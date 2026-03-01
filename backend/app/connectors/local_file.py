@@ -140,12 +140,35 @@ class LocalFileConnector(FileConnector):
         # Determine format from the first file
         file_format = self._get_file_format(file_paths[0])
         
+        # Read the full file directly so the backend can build true missing% and uniques metrics
+        # (This is far faster to sum/unique in Pandas than sending JSON rows to the frontend parser)
+        try:
+            full_df = await self._read_multiple_files(file_paths)
+            total_rows = len(full_df)
+        except Exception as e:
+            logger.warning(f"Could not load full file for schema metrics. Falling back to sample. Error: {e}")
+            full_df = df
+            total_rows = len(full_df)
+
         columns = {}
         for col_name, dtype in df.dtypes.items():
+            # If we successfully loaded full_df, calculate absolute metrics natively
+            if col_name in full_df.columns:
+                null_count = int(full_df[col_name].isnull().sum())
+                unique_count = int(full_df[col_name].nunique(dropna=True))
+                null_percent = round((null_count / total_rows * 100)) if total_rows > 0 else 0
+            else:
+                null_count = 0
+                unique_count = 0
+                null_percent = 0
+
             columns[col_name] = {
                 "type": str(dtype),
                 "pandas_type": dtype.name,
                 "nullable": bool(df[col_name].isnull().any()),
+                "null_count": null_count,
+                "unique_count": unique_count,
+                "null_percent": null_percent,
             }
         
         return {

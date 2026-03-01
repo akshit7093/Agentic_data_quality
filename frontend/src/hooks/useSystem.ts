@@ -12,7 +12,7 @@ export const useSystemHealth = () => {
 
 export const useLLMHealth = () => {
   const setLLMHealth = useStore((state) => state.setLLMHealth);
-  
+
   return useQuery({
     queryKey: ['system', 'llm-health'],
     queryFn: async () => {
@@ -20,7 +20,8 @@ export const useLLMHealth = () => {
       setLLMHealth(data);
       return data;
     },
-    refetchInterval: 30000,
+    refetchInterval: false, // Disabled auto-polling so it doesn't block the LLM during generation
+    refetchOnWindowFocus: false,
     retry: 2,
   });
 };

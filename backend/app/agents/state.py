@@ -1,7 +1,7 @@
-"""LangGraph agent state definitions — v8
-Fixed: exploration_steps, validation_steps (required by agent routing guards)
-Added: fix_recommendations, export_config, export_result (for export & quick-fix features)
-Added: total_count, data_source to ValidationResult (for accurate reporting)
+"""LangGraph agent state definitions.
+
+REWRITE v5 - Updated for ReAct (Reason + Act) Architecture.
+Supports dynamic agent queries, conversational memory, and raw execution tracking.
 """
 from typing import List, Dict, Any, Optional, TypedDict, Annotated
 from dataclasses import dataclass, field
@@ -10,66 +10,59 @@ import operator
 
 
 class ValidationMode(str, Enum):
-    """Validation mode selection."""
-    CUSTOM_RULES   = "custom_rules"
+    """Validation execution modes."""
+    CUSTOM_RULES = "custom_rules"
     AI_RECOMMENDED = "ai_recommended"
-    HYBRID         = "hybrid"
+    HYBRID = "hybrid"
+    SCHEMA_ONLY = "schema_only"
+    BUSINESS_ANALYSIS = "business_analysis"
 
 
 class AgentStatus(str, Enum):
     """Agent execution status."""
-    IDLE       = "idle"
+    IDLE = "idle"
     CONNECTING = "connecting"
-    EXPLORING  = "exploring"
-    PROFILING  = "profiling"
-    ANALYZING  = "analyzing"
+    EXPLORING = "exploring"    # NEW: For the exploratory query phase
+    PROFILING = "profiling"
+    ANALYZING = "analyzing"
     VALIDATING = "validating"
-    REPORTING  = "reporting"
-    COMPLETED  = "completed"
-    ERROR      = "error"
-
-
-class ExportFormat(str, Enum):
-    """Supported export formats."""
-    CSV      = "csv"
-    EXCEL    = "excel"
-    JSON     = "json"
-    DATABASE = "database"
-    PARQUET  = "parquet"
-
-
-class FixAction(str, Enum):
-    """User action for fix recommendations."""
-    MANUAL     = "manual"
-    AUTO_AGENT = "auto_agent"
-    SKIP       = "skip"
+    REPORTING = "reporting"
+    COMPLETED = "completed"
+    ERROR = "error"
 
 
 @dataclass
 class DataSourceInfo:
-    """Data source connection and metadata information."""
+    """Data source information."""
     source_type: str
     connection_config: Dict[str, Any]
     target_path: str
     schema: Optional[Dict[str, Any]] = None
-    sample_data: Optional[List[Dict]] = None   # exploration sample only (≤200 rows)
-    row_count: Optional[int] = None            # real count from full table
+    sample_data: Optional[List[Dict]] = None
+    row_count: Optional[int] = None
     column_count: Optional[int] = None
+    # Full-scan support
     full_scan_requested: bool = False
     full_scan_used: bool = False
+    slice_filters: Optional[Dict[str, Any]] = None
 
 
 @dataclass
 class ValidationRule:
-    """Data quality validation rule definition."""
+    """Validation rule definition.
+    Updated to support dynamic Agent-written SQL/Pandas queries.
+    """
     id: Optional[str]
     name: str
-    rule_type: str
-    severity: str
+    rule_type: str  # column, row, table, statistical, custom_sql, agent_query
+    severity: str  # info, warning, critical
     target_columns: List[str]
     config: Dict[str, Any]
+    
+    # NEW: Explicit fields for agentic queries
     query: Optional[str] = None
-    query_type: Optional[str] = None
+    query_type: Optional[str] = None  # 'sql', 'pandas', 'duckdb'
+    
     expression: Optional[str] = None
     is_ai_generated: bool = False
     ai_confidence: Optional[float] = None
@@ -78,48 +71,27 @@ class ValidationRule:
 
 @dataclass
 class ValidationResult:
+    """Individual validation result."""
     rule_id: str
     rule_name: str
-    status: str                        # passed | failed | warning | error
+    status: str  # passed, failed, warning, error
     passed_count: int
     failed_count: int
-    total_count: int = 0               # ← NEW: Total rows checked (from full dataset)
     failure_examples: List[Dict] = field(default_factory=list)
     failure_percentage: float = 0.0
     execution_time_ms: int = 0
     ai_insights: Optional[str] = None
     ai_suggestions: List[str] = field(default_factory=list)
-    severity: str = "info"
+    severity: str = "info"  # info, warning, critical
     rule_type: Optional[str] = None
+    
+    # NEW: Track exactly what the agent executed
     executed_query: Optional[str] = None
-    data_source: str = "full_dataset"  # ← NEW: sample | full_dataset
-
-
-@dataclass
-class FixRecommendation:
-    """Recommended fix for a failed validation rule."""
-    rule_id: str
-    issue_description: str
-    recommended_fix: str
-    fix_query: Optional[str] = None
-    estimated_rows_affected: int = 0
-    risk_level: str = "low"              # low | medium | high
-    user_action: FixAction = FixAction.MANUAL
-
-
-@dataclass
-class ExportConfig:
-    """Configuration for data export."""
-    format: ExportFormat
-    include_failed_rows: bool = True
-    include_passed_rows: bool = False
-    include_metadata: bool = True
-    output_path: Optional[str] = None
 
 
 @dataclass
 class DataProfile:
-    """Statistical profile of the dataset."""
+    """Data profiling results."""
     column_profiles: Dict[str, Dict[str, Any]]
     row_count: int
     column_count: int
@@ -128,61 +100,42 @@ class DataProfile:
 
 
 class AgentState(TypedDict):
+    """LangGraph agent state.
+    Serves as the memory and context for the ReAct loop.
     """
-    LangGraph agent state definition.
-    
-    This TypedDict defines all fields that can be read/written by agent nodes.
-    All fields must be declared here or LangGraph will reject state updates.
-    """
-    # ==========================================
-    # INPUT PARAMETERS
-    # ==========================================
+    # Input
     validation_id: str
     validation_mode: ValidationMode
     data_source_info: DataSourceInfo
     custom_rules: List[Any]
     execution_config: Dict[str, Any]
     
-    # ==========================================
-    # PROCESSING STATE
-    # ==========================================
+    # Processing state
     status: AgentStatus
     current_step: str
-    messages: Annotated[List[Dict[str, Any]], operator.add]   # append-only
     
-    # ==========================================
-    # DATA & CONTEXT
-    # ==========================================
+    # CRITICAL: Annotated with operator.add so messages append instead of overwrite!
+    messages: Annotated[List[Dict[str, Any]], operator.add]
+    
+    # Data
     data_profile: Optional[DataProfile]
     ai_recommended_rules: List[Any]
     all_rules: List[Any]
     validation_results: List[Any]
+    
+    # Context for RAG
     retrieved_context: List[Dict[str, Any]]
     
-    # ==========================================
-    # FIX & EXPORT (NEW - v8)
-    # ==========================================
-    fix_recommendations: List[FixRecommendation]
-    export_config: Optional[ExportConfig]
-    export_result: Optional[Dict[str, Any]]
+    # NEW: Loop Breaker / Step Trackers
+    exploration_steps: int
+    validation_steps: int
     
-    # ==========================================
-    # OUTPUT RESULTS
-    # ==========================================
+    # Output
     quality_score: Optional[float]
     summary_report: Optional[Dict[str, Any]]
     error_message: Optional[str]
     
-    # ==========================================
-    # TIMING & METRICS
-    # ==========================================
+    # Metadata
     started_at: Optional[str]
     completed_at: Optional[str]
     execution_metrics: Dict[str, Any]
-    
-    # ==========================================
-    # ITERATION COUNTERS (FIXED - v8)
-    # These were missing in v6, causing LangGraph key errors
-    # ==========================================
-    exploration_steps: int
-    validation_steps: int

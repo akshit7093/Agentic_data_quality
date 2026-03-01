@@ -48,12 +48,14 @@ class LLMService:
         
         elif provider == "lmstudio":
             logger.info(f"Initializing LM Studio LLM at: {self.settings.LMSTUDIO_BASE_URL}")
+            # Import the centralized config so max_tokens is tunable in one place
+            from app.agents.data_quality_agent import LLM_MAX_TOKENS
             return ChatOpenAI(
                 model=self.settings.LMSTUDIO_MODEL.strip(),
                 base_url=self.settings.LMSTUDIO_BASE_URL.strip(),
                 api_key=self.settings.LMSTUDIO_API_KEY or "not-needed",
                 temperature=0.1,
-                max_tokens=8192, # Expanded for <REPORT> and <METADATA> generation
+                max_tokens=LLM_MAX_TOKENS,
             )
         
         elif provider == "openai":

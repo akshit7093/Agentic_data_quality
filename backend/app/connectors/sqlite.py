@@ -126,13 +126,32 @@ class SQLiteConnector(BaseConnector):
                 "default": str(col.get('default')) if col.get('default') else None,
             }
 
-            # Add type-specific info
+        # Add type-specific info
             if hasattr(col_type, 'length') and col_type.length:
                 columns[col_name]['max_length'] = col_type.length
             if hasattr(col_type, 'precision') and col_type.precision:
                 columns[col_name]['precision'] = col_type.precision
             if hasattr(col_type, 'scale') and col_type.scale:
                 columns[col_name]['scale'] = col_type.scale
+
+        # Query exact metrics from SQLite (fast for local files, prevents sampling issues)
+        try:
+            with self._engine.connect() as conn:
+                # 1. Total row count is fast
+                total_rows = conn.execute(text(f'SELECT COUNT(*) FROM "{table_name}"')).scalar() or 0
+                
+                # 2. Get nulls and uniques per column
+                for col_name in columns.keys():
+                    queries = f'SELECT COUNT("{col_name}"), COUNT(DISTINCT "{col_name}") FROM "{table_name}"'
+                    result = conn.execute(text(queries)).fetchone()
+                    if result:
+                        non_null_count, unique_count = result
+                        null_count = total_rows - non_null_count
+                        columns[col_name]["null_count"] = null_count
+                        columns[col_name]["unique_count"] = unique_count
+                        columns[col_name]["null_percent"] = round((null_count / total_rows * 100)) if total_rows > 0 else 0
+        except Exception as e:
+            logger.warning(f"Could not compute exact column metrics in schema for {table_name}: {e}")
 
         # Get primary keys
         pk_info = inspector.get_pk_constraint(table_name)
@@ -208,10 +227,11 @@ class SQLiteConnector(BaseConnector):
         sample_size: int = 1000,
         method: str = "random",
         full_scan: bool = False,
+        slice_filters: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Sample data from table."""
         if full_scan:
-            return await self.read_data(resource_path, limit=None)
+            return await self.read_data(resource_path, limit=None, filters=slice_filters)
             
         if not self._engine:
             raise RuntimeError("Not connected to database")
@@ -232,13 +252,24 @@ class SQLiteConnector(BaseConnector):
             raise ValueError(f"Unknown sampling method: {method}")
 
         # Execute query
+        params = {}
+        if slice_filters:
+            conditions = []
+            for i, (col, val) in enumerate(slice_filters.items()):
+                param_name = f"slice_{i}"
+                conditions.append(f'"{col}" = :{param_name}')
+                params[param_name] = val
+            
+            where_clause = " WHERE " + " AND ".join(conditions)
+            query = query.replace(f'ROM "{table_name}"', f'ROM "{table_name}" {where_clause}')
+
         with self._engine.connect() as conn:
-            result = conn.execute(text(query))
+            result = conn.execute(text(query), params)
             rows = [dict(row._mapping) for row in result]
 
         return rows
 
-    async def get_row_count(self, resource_path: str) -> int:
+    async def get_row_count(self, resource_path: str, slice_filters: Optional[Dict[str, Any]] = None) -> int:
         """Get row count for table."""
         if not self._engine:
             raise RuntimeError("Not connected to database")
@@ -247,9 +278,18 @@ class SQLiteConnector(BaseConnector):
         table_name = resource_path
 
         query = f'SELECT COUNT(*) FROM "{table_name}"'
+        params = {}
+        
+        if slice_filters:
+            conditions = []
+            for i, (col, val) in enumerate(slice_filters.items()):
+                param_name = f"slice_{i}"
+                conditions.append(f'"{col}" = :{param_name}')
+                params[param_name] = val
+            query += " WHERE " + " AND ".join(conditions)
 
         with self._engine.connect() as conn:
-            result = conn.execute(text(query))
+            result = conn.execute(text(query), params)
             count = result.scalar()
 
         return count
@@ -271,13 +311,14 @@ class SQLiteConnector(BaseConnector):
             "primary_keys": schema['primary_keys'],
         }
 
-    async def execute_raw_query(self, query: str, query_type: str = "sql") -> Dict[str, Any]:
+    async def execute_raw_query(self, query: str, query_type: str = "sql", slice_filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Natively execute an LLM-generated raw SQL query against the SQLite database.
+        Natively execute an LLM-generated raw SQL query against the connected database.
         
         Args:
             query: The raw query string to execute.
             query_type: Must be 'sql' for this connector.
+            slice_filters: Optional UI filters to enforce as a bounded scope.
             
         Returns:
             Dict containing execution status, row counts, and sample row data.
@@ -296,8 +337,58 @@ class SQLiteConnector(BaseConnector):
 
         try:
             logger.info(f"Natively executing raw SQLite query: {query}")
+            
+            # Subquery injection to enforce UI slice filters
+            params = {}
+            if slice_filters:
+                # We do a naive replace of the target table name with a subquery
+                # For a perfect implementation you'd use a SQL parser (SQLGlot),
+                # but for this MVP we find the table name dynamically from the agent state or assume
+                # the query is simple enough that replacing the FROM clause works if we know the table.
+                # A safer MVP approach: We inject the WHERE clause into the query if it doesn't have one,
+                # or append it with AND if it does.
+                
+                conditions = []
+                for i, (col, val) in enumerate(slice_filters.items()):
+                    param_name = f"slice_raw_{i}"
+                    conditions.append(f'"{col}" = :{param_name}')
+                    params[param_name] = val
+                
+                where_clause = " AND ".join(conditions)
+                
+                if "WHERE" in query.upper():
+                    # Safest simple injection: Replace WHERE with WHERE (original) AND (new)
+                    # We'll just append it to the end before ORDER/LIMIT for simple queries
+                    upper_query = query.upper()
+                    if "ORDER BY" in upper_query:
+                        idx = upper_query.index("ORDER BY")
+                        query = query[:idx] + f" AND ({where_clause}) " + query[idx:]
+                    elif "LIMIT" in upper_query:
+                        idx = upper_query.index("LIMIT")
+                        query = query[:idx] + f" AND ({where_clause}) " + query[idx:]
+                    elif "GROUP BY" in upper_query:
+                        idx = upper_query.index("GROUP BY")
+                        query = query[:idx] + f" AND ({where_clause}) " + query[idx:]
+                    else:
+                        query += f" AND ({where_clause})"
+                else:
+                    # No WHERE clause exists
+                    upper_query = query.upper()
+                    insertion = f" WHERE {where_clause} "
+                    if "ORDER BY" in upper_query:
+                        idx = upper_query.index("ORDER BY")
+                        query = query[:idx] + insertion + query[idx:]
+                    elif "LIMIT" in upper_query:
+                        idx = upper_query.index("LIMIT")
+                        query = query[:idx] + insertion + query[idx:]
+                    elif "GROUP BY" in upper_query:
+                        idx = upper_query.index("GROUP BY")
+                        query = query[:idx] + insertion + query[idx:]
+                    else:
+                        query += insertion
+
             with self._engine.connect() as conn:
-                result = conn.execute(text(query))
+                result = conn.execute(text(query), params)
                 
                 if result.returns_rows:
                     all_rows = [dict(row._mapping) for row in result.fetchall()]

@@ -412,6 +412,18 @@ export default function ValidationDetail() {
                   : '—'}
               </p>
             </div>
+            {validation?.slice_filters && Object.keys(validation.slice_filters).length > 0 && (
+              <div className="col-span-2 md:col-span-4 mt-2">
+                <p className="text-xs text-gray-500 uppercase mb-1">Active Slice Filters</p>
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(validation.slice_filters).map(([col, val]) => (
+                    <span key={col} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                      {col} = {String(val)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

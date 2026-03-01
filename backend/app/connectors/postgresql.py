@@ -216,11 +216,12 @@ class PostgreSQLConnector(BaseConnector):
         resource_path: str,
         sample_size: int = 1000,
         method: str = "random",
-        full_scan: bool = False
+        full_scan: bool = False,
+        slice_filters: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """Sample data from table."""
         if full_scan:
-            return await self.read_data(resource_path, limit=None)
+            return await self.read_data(resource_path, limit=None, filters=slice_filters)
             
         if not self._engine:
             raise RuntimeError("Not connected to database")
@@ -257,14 +258,35 @@ class PostgreSQLConnector(BaseConnector):
         else:
             raise ValueError(f"Unknown sampling method: {method}")
         
+        # Add slice filters
+        params = {}
+        if slice_filters:
+            conditions = []
+            for i, (col, val) in enumerate(slice_filters.items()):
+                param_name = f"slice_{i}"
+                conditions.append(f'"{col}" = :{param_name}')
+                params[param_name] = val
+            
+            where_clause = " WHERE " + " AND ".join(conditions)
+            # Insert where_clause before any potential ORDER BY or LIMIT
+            if " ORDER BY " in query:
+                query = query.replace(" ORDER BY ", f"{where_clause} ORDER BY ", 1)
+            elif " LIMIT " in query:
+                query = query.replace(" LIMIT ", f"{where_clause} LIMIT ", 1)
+            elif " TABLESAMPLE " in query:
+                # TABLESAMPLE applies to the table before filtering, so we append WHERE after
+                query = f"{query} {where_clause}"
+            else:
+                query += where_clause
+        
         # Execute query
         with self._engine.connect() as conn:
-            result = conn.execute(text(query))
+            result = conn.execute(text(query), params)
             rows = [dict(row._mapping) for row in result]
         
         return rows
     
-    async def get_row_count(self, resource_path: str) -> int:
+    async def get_row_count(self, resource_path: str, slice_filters: Optional[Dict[str, Any]] = None) -> int:
         """Get row count for table."""
         if not self._engine:
             raise RuntimeError("Not connected to database")
@@ -284,8 +306,17 @@ class PostgreSQLConnector(BaseConnector):
         
         query = f"SELECT COUNT(*) FROM {table_ref}"
         
+        params = {}
+        if slice_filters:
+            conditions = []
+            for i, (col, val) in enumerate(slice_filters.items()):
+                param_name = f"slice_{i}"
+                conditions.append(f'"{col}" = :{param_name}')
+                params[param_name] = val
+            query += " WHERE " + " AND ".join(conditions)
+        
         with self._engine.connect() as conn:
-            result = conn.execute(text(query))
+            result = conn.execute(text(query), params)
             count = result.scalar()
         
         return count
@@ -307,13 +338,14 @@ class PostgreSQLConnector(BaseConnector):
             "primary_keys": schema['primary_keys'],
         }
 
-    async def execute_raw_query(self, query: str, query_type: str = "sql") -> Dict[str, Any]:
+    async def execute_raw_query(self, query: str, query_type: str = "sql", slice_filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Natively execute an LLM-generated raw SQL query against the connected database.
         
         Args:
             query: The raw query string to execute.
             query_type: Must be 'sql' for this connector.
+            slice_filters: Optional UI filters to enforce as a bounded scope.
             
         Returns:
             Dict containing execution status, row counts, and sample row data.
@@ -332,9 +364,50 @@ class PostgreSQLConnector(BaseConnector):
 
         try:
             logger.info(f"Natively executing raw SQL query: {query}")
+            
+            # Subquery injection to enforce UI slice filters
+            params = {}
+            if slice_filters:
+                from sqlalchemy import text
+                conditions = []
+                for i, (col, val) in enumerate(slice_filters.items()):
+                    param_name = f"slice_raw_{i}"
+                    conditions.append(f'"{col}" = :{param_name}')
+                    params[param_name] = val
+                
+                where_clause = " AND ".join(conditions)
+                
+                if "WHERE" in query.upper():
+                    upper_query = query.upper()
+                    if "ORDER BY" in upper_query:
+                        idx = upper_query.index("ORDER BY")
+                        query = query[:idx] + f" AND ({where_clause}) " + query[idx:]
+                    elif "LIMIT" in upper_query:
+                        idx = upper_query.index("LIMIT")
+                        query = query[:idx] + f" AND ({where_clause}) " + query[idx:]
+                    elif "GROUP BY" in upper_query:
+                        idx = upper_query.index("GROUP BY")
+                        query = query[:idx] + f" AND ({where_clause}) " + query[idx:]
+                    else:
+                        query += f" AND ({where_clause})"
+                else:
+                    upper_query = query.upper()
+                    insertion = f" WHERE {where_clause} "
+                    if "ORDER BY" in upper_query:
+                        idx = upper_query.index("ORDER BY")
+                        query = query[:idx] + insertion + query[idx:]
+                    elif "LIMIT" in upper_query:
+                        idx = upper_query.index("LIMIT")
+                        query = query[:idx] + insertion + query[idx:]
+                    elif "GROUP BY" in upper_query:
+                        idx = upper_query.index("GROUP BY")
+                        query = query[:idx] + insertion + query[idx:]
+                    else:
+                        query += insertion
+
             with self._engine.connect() as conn:
                 # Using a transaction block ensures read-only safety can be managed if needed later
-                result = conn.execute(text(query))
+                result = conn.execute(text(query), params)
                 
                 if result.returns_rows:
                     # Fetch all rows to get the accurate count, but only return a small subset

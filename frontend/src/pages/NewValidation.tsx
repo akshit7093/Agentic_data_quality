@@ -24,6 +24,7 @@ import { useSubmitValidation } from '@/hooks/useValidations';
 import { useLLMHealth } from '@/hooks/useSystem';
 import { dataSourceApi, fileApi } from '@/services/api';
 import Modal from '@/components/Modal';
+import DataExplorer from '@/components/DataExplorer';
 
 interface DataResource {
   name: string;
@@ -63,6 +64,18 @@ const VALIDATION_MODES = [
     description: 'Combine custom rules with AI recommendations',
     icon: Database,
   },
+  {
+    id: 'schema_only',
+    name: 'Schema Only',
+    description: 'Specialized structural and datatypes analysis',
+    icon: Table,
+  },
+  {
+    id: 'business_analysis',
+    name: 'Business Analysis',
+    description: 'Specialized logic anomalies and multidimensional insights',
+    icon: FileJson,
+  },
 ];
 
 // Source type display info
@@ -79,15 +92,29 @@ export default function NewValidation() {
   const submitValidation = useSubmitValidation();
   const { data: llmHealth } = useLLMHealth();
 
-  const [step, setStep] = useState<'source' | 'browse' | 'config' | 'review'>('source');
+  const [step, setStep] = useState<'source' | 'browse' | 'explore' | 'config' | 'review'>('source');
   const [selectedDataSource, setSelectedDataSource] = useState<string>('');
   const [selectedResource, setSelectedResource] = useState<DataResource | null>(null);
   const [expandedResources, setExpandedResources] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [validationMode, setValidationMode] = useState('hybrid');
   const [sampleSize, setSampleSize] = useState(1000);
+  const [sliceFilters, setSliceFilters] = useState<any[]>([]);
+
+  // Discovery metadata state
+  const [discoveryMetadata, setDiscoveryMetadata] = useState<any>(null);
+  const [discoveryLoading, setDiscoveryLoading] = useState(false);
+
+  const [customRules, setCustomRules] = useState<any[]>([]);
+  const [newRuleColumn, setNewRuleColumn] = useState('');
+  const [newRuleOperator, setNewRuleOperator] = useState('>');
+  const [newRuleValue, setNewRuleValue] = useState('');
+
   const [isLoading, setIsLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showFullDataModal, setShowFullDataModal] = useState(false);
+  const [fullDataPage, setFullDataPage] = useState(0);
+  const FULL_DATA_PAGE_SIZE = 50;
 
   // Dynamic resource loading
   const [resources, setResources] = useState<DataResource[]>([]);
@@ -122,13 +149,41 @@ export default function NewValidation() {
   const loadPreview = async (resource: DataResource) => {
     setPreviewLoading(true);
     try {
-      const data = await dataSourceApi.getPreview(selectedDataSource, resource.path, 20);
+      const data = await dataSourceApi.getPreview(selectedDataSource, resource.path, 1000);
       setPreviewData(data);
     } catch (err) {
       console.error('Failed to load preview:', err);
       setPreviewData(null);
     } finally {
       setPreviewLoading(false);
+    }
+  };
+
+  // Auto-discover filters when entering explore step with a selected resource
+  useEffect(() => {
+    if (step === 'explore' && selectedResource && selectedDataSource && !discoveryMetadata) {
+      loadDiscovery();
+    }
+  }, [step, selectedResource, selectedDataSource]);
+
+  const loadDiscovery = async () => {
+    if (!selectedResource || !selectedDataSource) return;
+    setDiscoveryLoading(true);
+    try {
+      const res = await fetch(
+        `/api/v1/datasources/${selectedDataSource}/discover-filters?resource_path=${encodeURIComponent(selectedResource.path)}`,
+        { method: 'POST' }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setDiscoveryMetadata(data);
+      } else {
+        console.error('Discovery failed:', await res.text());
+      }
+    } catch (err) {
+      console.error('Discovery error:', err);
+    } finally {
+      setDiscoveryLoading(false);
     }
   };
 
@@ -168,13 +223,19 @@ export default function NewValidation() {
 
     setIsLoading(true);
     try {
-      const result = await submitValidation.mutateAsync({
+      const payload: any = {
         data_source_id: selectedDataSource,
         target_path: selectedResource.path,
         validation_mode: validationMode,
         sample_size: sampleSize,
-        custom_rules: [],
-      });
+        custom_rules: customRules,
+      };
+
+      if (sliceFilters.length > 0) {
+        payload.slice_filters = sliceFilters;
+      }
+
+      const result = await submitValidation.mutateAsync(payload);
 
       if (result?.validation_id) {
         navigate(`/validations/${result.validation_id}`);
@@ -207,14 +268,16 @@ export default function NewValidation() {
       {[
         { id: 'source', label: 'Data Source', icon: Database },
         { id: 'browse', label: 'Browse', icon: Folder },
+        { id: 'explore', label: 'Explore & Slice', icon: Table },
         { id: 'config', label: 'Configure', icon: Settings },
         { id: 'review', label: 'Review', icon: CheckCircle },
       ].map((s, idx) => {
         const isActive = step === s.id;
         const isCompleted =
           (step === 'browse' && s.id === 'source') ||
-          (step === 'config' && ['source', 'browse'].includes(s.id)) ||
-          (step === 'review' && ['source', 'browse', 'config'].includes(s.id));
+          (step === 'explore' && ['source', 'browse'].includes(s.id)) ||
+          (step === 'config' && ['source', 'browse', 'explore'].includes(s.id)) ||
+          (step === 'review' && ['source', 'browse', 'explore', 'config'].includes(s.id));
 
         return (
           <div key={s.id} className="flex items-center">
@@ -588,7 +651,12 @@ export default function NewValidation() {
           Back
         </button>
         <button
-          onClick={() => setStep('config')}
+          onClick={() => {
+            if (selectedResource) {
+              loadPreview(selectedResource);
+            }
+            setStep('explore');
+          }}
           disabled={!selectedResource}
           className="btn-primary disabled:opacity-50"
         >
@@ -647,6 +715,112 @@ export default function NewValidation() {
           <div className="text-center p-8 text-gray-500">No preview available</div>
         )}
       </Modal>
+    </div>
+  );
+
+  const renderExploreStep = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900">Data Exploration & Slicing</h2>
+        <p className="text-gray-500 mt-1">Review your dataset, apply filters, or build a pivot table</p>
+      </div>
+
+      <DataExplorer
+        resource={selectedResource}
+        previewData={previewData}
+        sliceFilters={sliceFilters}
+        setSliceFilters={setSliceFilters}
+        discoveryMetadata={discoveryMetadata}
+        discoveryLoading={discoveryLoading}
+        dataSourceId={selectedDataSource}
+        onViewCompleteData={() => setShowFullDataModal(true)}
+      />
+
+      {/* ── Full Data Viewer Modal ── */}
+      {showFullDataModal && previewData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl w-[90vw] max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Complete Data View</h3>
+                <p className="text-sm text-gray-500">
+                  {previewData.total_rows.toLocaleString()} rows × {previewData.columns.length} columns
+                  {previewData.rows.length < previewData.total_rows &&
+                    ` (showing ${previewData.rows.length.toLocaleString()} loaded)`}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowFullDataModal(false)}
+                className="p-2 rounded-lg hover:bg-gray-100 text-gray-500"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">#</th>
+                    {previewData.columns.map((col) => (
+                      <th key={col.name} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                        {col.name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {previewData.rows
+                    .slice(fullDataPage * FULL_DATA_PAGE_SIZE, (fullDataPage + 1) * FULL_DATA_PAGE_SIZE)
+                    .map((row, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-3 py-1.5 text-xs text-gray-400">
+                          {fullDataPage * FULL_DATA_PAGE_SIZE + idx + 1}
+                        </td>
+                        {previewData.columns.map((col) => (
+                          <td key={col.name} className="px-3 py-1.5 text-sm text-gray-800 max-w-[200px] truncate">
+                            {row[col.name] != null ? String(row[col.name]) : <span className="text-gray-300 italic">null</span>}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-between p-3 border-t bg-gray-50">
+              <span className="text-sm text-gray-500">
+                Page {fullDataPage + 1} of {Math.ceil(previewData.rows.length / FULL_DATA_PAGE_SIZE)}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setFullDataPage(p => Math.max(0, p - 1))}
+                  disabled={fullDataPage === 0}
+                  className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-40 hover:bg-gray-100"
+                >
+                  ← Previous
+                </button>
+                <button
+                  onClick={() => setFullDataPage(p => Math.min(Math.ceil(previewData.rows.length / FULL_DATA_PAGE_SIZE) - 1, p + 1))}
+                  disabled={(fullDataPage + 1) * FULL_DATA_PAGE_SIZE >= previewData.rows.length}
+                  className="px-3 py-1.5 text-sm border rounded-md disabled:opacity-40 hover:bg-gray-100"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex justify-between">
+        <button onClick={() => setStep('browse')} className="btn-secondary">
+          <ChevronLeft className="w-4 h-4 mr-2 inline" />
+          Back
+        </button>
+        <button onClick={() => setStep('config')} className="btn-primary">
+          Continue to Configuration
+          <ChevronRight className="w-4 h-4 ml-2 inline" />
+        </button>
+      </div>
     </div>
   );
 
@@ -741,6 +915,125 @@ export default function NewValidation() {
         </p>
       </div>
 
+      {/* Custom Rules Builder */}
+      {['custom_rules', 'hybrid'].includes(validationMode) && (
+        <div className="bg-white border rounded-lg p-4">
+          <label className="form-label text-gray-900 flex items-center mb-1">
+            Custom Validation Rules
+          </label>
+          <p className="text-sm text-gray-500 mb-4">
+            Add specific SQL-like checks based on the columns.
+          </p>
+
+          {customRules.length > 0 && (
+            <div className="flex flex-col gap-2 mb-4">
+              {customRules.map((rule, idx) => (
+                <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded border">
+                  <div>
+                    <span className="font-medium text-sm text-gray-800">{rule.name}</span>
+                    <span className="text-xs text-gray-500 ml-2">
+                      (col: {rule.target_columns?.join(', ')}, expr: {rule.expression})
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="text-red-500 hover:text-red-700 font-bold"
+                    onClick={() => {
+                      const next = [...customRules];
+                      next.splice(idx, 1);
+                      setCustomRules(next);
+                    }}
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex space-x-2 items-center">
+            {selectedResource?.columns ? (
+              <select
+                className="flex-1 border-gray-300 rounded-lg shadow-sm focus:ring-primary-500 py-2 px-3 text-sm"
+                value={newRuleColumn}
+                title="Column"
+                onChange={(e) => setNewRuleColumn(e.target.value)}
+              >
+                <option value="">Select Column...</option>
+                {selectedResource.columns.map((c) => (
+                  <option key={c.name} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                type="text"
+                placeholder="Column name"
+                className="flex-1 border-gray-300 rounded-lg shadow-sm focus:ring-primary-500 py-2 px-3 text-sm"
+                value={newRuleColumn}
+                onChange={(e) => setNewRuleColumn(e.target.value)}
+              />
+            )}
+
+            <select
+              title="Operator"
+              className="w-28 border-gray-300 rounded-lg shadow-sm focus:ring-primary-500 py-2 px-3 text-sm"
+              value={newRuleOperator}
+              onChange={(e) => setNewRuleOperator(e.target.value)}
+            >
+              <option value="=">=</option>
+              <option value=">">&gt;</option>
+              <option value="<">&lt;</option>
+              <option value=">=">&gt;=</option>
+              <option value="<=">&lt;=</option>
+              <option value="!=">!=</option>
+              <option value="IS NULL">IS NULL</option>
+              <option value="IS NOT NULL">IS NOT NULL</option>
+            </select>
+
+            {!['IS NULL', 'IS NOT NULL'].includes(newRuleOperator) && (
+              <input
+                type="text"
+                placeholder="Value"
+                className="flex-1 border-gray-300 rounded-lg shadow-sm focus:ring-primary-500 py-2 px-3 text-sm"
+                value={newRuleValue}
+                onChange={(e) => setNewRuleValue(e.target.value)}
+              />
+            )}
+
+            <button
+              type="button"
+              className="btn-secondary px-4 py-2 text-sm whitespace-nowrap"
+              disabled={!newRuleColumn || (!newRuleValue && !['IS NULL', 'IS NOT NULL'].includes(newRuleOperator))}
+              onClick={() => {
+                const expr = ['IS NULL', 'IS NOT NULL'].includes(newRuleOperator)
+                  ? `${newRuleColumn} ${newRuleOperator}`
+                  : `${newRuleColumn} ${newRuleOperator} ${newRuleValue}`;
+
+                const safeName = `Check_${newRuleColumn}_${newRuleOperator.replace(/\s+/g, '_')}`;
+
+                setCustomRules([
+                  ...customRules,
+                  {
+                    name: safeName,
+                    rule_type: "custom_sql",
+                    severity: "high",
+                    target_columns: [newRuleColumn],
+                    rule_config: {},
+                    expression: expr
+                  }
+                ]);
+                setNewRuleColumn('');
+                setNewRuleValue('');
+              }}
+            >
+              Add Rule
+            </button>
+          </div>
+        </div>
+      )}
+
+
+
       {/* LLM Status */}
       <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
         <div className="flex items-center space-x-3">
@@ -767,7 +1060,7 @@ export default function NewValidation() {
       </div>
 
       <div className="flex justify-between">
-        <button onClick={() => setStep('browse')} className="btn-secondary">
+        <button onClick={() => setStep('explore')} className="btn-secondary">
           <ChevronLeft className="w-4 h-4 mr-2 inline" />
           Back
         </button>
@@ -887,6 +1180,30 @@ export default function NewValidation() {
           </button>
         </div>
 
+        {sliceFilters.length > 0 && (
+          <div className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Active Slice Filters</p>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {sliceFilters.map((f: any, i: number) => (
+                  <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                    {f.column}: {f.filter_type}
+                    {f.selected_values ? ` (${f.selected_values.length})` : ''}
+                    {f.min_value != null || f.max_value != null ? ` [${f.min_value ?? ''}–${f.max_value ?? ''}]` : ''}
+                    {f.text_pattern ? ` "${f.text_pattern}"` : ''}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={() => setStep('explore')}
+              className="text-sm text-primary-600 hover:text-primary-700"
+            >
+              Change
+            </button>
+          </div>
+        )}
+
         <div className="p-4 flex items-center justify-between">
           <div>
             <p className="text-sm text-gray-500">AI Model</p>
@@ -949,9 +1266,10 @@ export default function NewValidation() {
 
       {renderStepIndicator()}
 
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         {step === 'source' && renderSourceStep()}
         {step === 'browse' && renderBrowseStep()}
+        {step === 'explore' && renderExploreStep()}
         {step === 'config' && renderConfigStep()}
         {step === 'review' && renderReviewStep()}
       </div>

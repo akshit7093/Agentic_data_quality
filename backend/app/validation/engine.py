@@ -181,11 +181,28 @@ class ValidationEngine:
         df = None
         if not sql_pushdown_enabled or any(r.rule_type != 'custom_sql' for r in rules):
             df = pd.DataFrame(sample_data)
+            
+            # Apply slicing filters to the pandas dataframe if provided
+            slice_filters = getattr(data_source_info, 'slice_filters', None) if data_source_info else None
+            if slice_filters:
+                try:
+                    for col, val in slice_filters.items():
+                        if isinstance(val, str):
+                            df = df[df[col] == val]
+                        else:
+                            df = df[df[col] == val]
+                    self.execution_logs.append({
+                        "role": "system",
+                        "content": f"[Engine] Applied UI Slice Filters: {slice_filters}. Pandas subsets to {len(df)} rows."
+                    })
+                except Exception as e:
+                    logger.warning(f"Failed to apply slice_filters to Pandas dataframe: {e}")
+            
             self.execution_logs.append({
                 "role": "system",
                 "content": f"[Engine] Initialized Pandas fallback with {len(df)} sample rows."
             })
-            logger.info(f"DataFrame created with {len(df)} rows")
+            logger.info(f"DataFrame created with {len(df)} rows after slicing")
         
         results = []
         for i, rule in enumerate(rules, 1):

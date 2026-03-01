@@ -46,14 +46,14 @@ const parseContent = (content: string, role: string): ParsedBlock[] => {
 
     const remaining = content.substring(lastIndex).trim();
     if (remaining) {
-        // Check if remaining contains <REPORT>
-        const reportMatch = /<REPORT>([\s\S]*?)<\/REPORT>/.exec(remaining);
+        // Check if remaining contains <REPORT> or <METADATA> case-insensitively
+        const reportMatch = /<(REPORT|METADATA)>([\s\S]*?)<\/\1>/i.exec(remaining);
         if (reportMatch) {
             const thoughtText = remaining.substring(0, reportMatch.index).trim();
             if (thoughtText) {
                 blocks.push({ type: 'thought', content: thoughtText });
             }
-            blocks.push({ type: 'output', content: 'Final Report Generated', report: reportMatch[1].trim() });
+            blocks.push({ type: 'output', content: 'Final Report Generated', report: reportMatch[2].trim() });
 
             const afterReport = remaining.substring(reportMatch.index + reportMatch[0].length).trim();
             if (afterReport) {

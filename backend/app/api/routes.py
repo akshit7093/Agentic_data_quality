@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from app.core.config import get_settings
 from app.agents.state import (
     DataSourceInfo, ValidationMode, ValidationRule as AgentValidationRule,
-    AgentState, ExportFormat, FixAction, ExportConfig
+    AgentState
 )
 from app.agents.data_quality_agent import get_data_quality_agent
 from app.agents.llm_service import get_llm_service
@@ -134,6 +134,7 @@ class ValidationRequest(BaseModel):
     sample_size: Optional[int] = 1000
     full_scan: bool = False
     execution_config: Optional[Dict[str, Any]] = {}
+    slice_filters: Optional[Dict[str, Any]] = None  # Key-value pairs for pivot-like slicing
 
 
 class ValidationResponse(BaseModel):
@@ -338,7 +339,7 @@ async def get_data_source_schema(
 async def preview_data_source(
     source_id: str,
     resource_path: str = Query(...),
-    limit: int = Query(default=20, le=100),
+    limit: int = Query(default=1000, le=10000),
 ):
     """Get preview data rows for a resource."""
     source = _get_source(source_id)
@@ -350,11 +351,17 @@ async def preview_data_source(
 
         schema = await connector.get_schema(resource_path)
         columns_info = [
-            {"name": k, "type": v.get("type", "unknown")}
+            {
+                "name": k,
+                "type": v.get("type", "unknown"),
+                "null_count": v.get("null_count"),
+                "unique_count": v.get("unique_count"),
+                "null_percent": v.get("null_percent")
+            }
             for k, v in schema.get("columns", {}).items()
         ]
 
-        rows = await connector.sample_data(resource_path, sample_size=limit)
+        rows = await connector.sample_data(resource_path, sample_size=limit, method="first")
 
         try:
             row_count = await connector.get_row_count(resource_path)
@@ -396,6 +403,7 @@ async def list_validations():
             "target_path": v.get("target_path", ""),
             "data_source_id": v.get("data_source_id", ""),
             "validation_mode": v.get("validation_mode", "hybrid"),
+            "slice_filters": v.get("slice_filters"),
             "error_message": v.get("error_message"),
             "full_scan_used": v.get("full_scan_used", False),
         })
@@ -425,6 +433,7 @@ async def submit_validation(
         "target_path": request.target_path,
         "data_source_id": request.data_source_id,
         "validation_mode": request.validation_mode,
+        "slice_filters": request.slice_filters,
         "full_scan_used": request.full_scan,
     }
 
@@ -448,6 +457,7 @@ async def run_validation(validation_id: str, request: ValidationRequest):
             connection_config=source["connection_config"],
             target_path=request.target_path,
             full_scan_requested=request.full_scan,
+            slice_filters=request.slice_filters,
         )
 
         custom_rules = []
@@ -462,10 +472,20 @@ async def run_validation(validation_id: str, request: ValidationRequest):
                 expression=rule.expression,
             ))
 
-        agent = get_data_quality_agent()
+        validation_mode_enum = ValidationMode(request.validation_mode.lower())
+        
+        if validation_mode_enum == ValidationMode.SCHEMA_ONLY:
+            from app.agents.schema_agent import SchemaValidationAgent
+            agent = SchemaValidationAgent()
+        elif validation_mode_enum == ValidationMode.BUSINESS_ANALYSIS:
+            from app.agents.business_agent import BusinessAnalystAgent
+            agent = BusinessAnalystAgent()
+        else:
+            agent = get_data_quality_agent()
+            
         result = await agent.run(
             validation_id=validation_id,
-            validation_mode=ValidationMode(request.validation_mode.lower()),
+            validation_mode=validation_mode_enum,
             data_source_info=data_source_info,
             custom_rules=custom_rules,
             execution_config={
@@ -523,6 +543,7 @@ async def get_validation_status(validation_id: str):
         target_path=v.get("target_path"),
         data_source_id=v.get("data_source_id"),
         validation_mode=v.get("validation_mode"),
+        slice_filters=v.get("slice_filters"),
         data_profile=data_profile,
         result=result,
         full_scan_used=v.get("full_scan_used", False),
@@ -870,9 +891,13 @@ async def generate_ticket(validation_id: str, request: TicketRequest):
     failure_examples = []
     
     for r in results:
-        if r.get("rule_name") == request.rule_name:
-            rule_details = r
-            failure_examples = r.get("failure_examples", [])
+        # Check both dict access and object attribute access in case of Pydantic model
+        r_name = r.get("rule_name") if isinstance(r, dict) else getattr(r, "rule_name", None)
+        
+        if r_name == request.rule_name:
+            # Convert to dict for TicketAgent if it's an object
+            rule_details = r if isinstance(r, dict) else r.model_dump()
+            failure_examples = rule_details.get("failure_examples", [])
             break
             
     if not rule_details:
@@ -1108,6 +1133,213 @@ async def upload_file(
         "path": str(file_path),
         "size": len(content),
     }
+
+# ============================================================================
+# Dynamic Filter & Pivot Discovery Routes (NEW - v9)
+# ============================================================================
+
+class FilterSelectionItem(BaseModel):
+    """A single user filter selection."""
+    column: str
+    filter_type: str
+    selected_values: Optional[List[Any]] = None
+    min_value: Optional[Any] = None
+    max_value: Optional[Any] = None
+    text_pattern: Optional[str] = None
+    is_negated: bool = False
+
+
+class ApplyFiltersRequest(BaseModel):
+    """Apply structured filters to a data source."""
+    resource_path: str
+    filters: List[FilterSelectionItem]
+
+
+class ApplyPivotRequest(BaseModel):
+    """Apply pivot operations on (optionally filtered) data."""
+    resource_path: str
+    dimensions: List[str]
+    measures: List[Dict[str, str]]  # [{"column": "x", "aggregation": "sum"}]
+    filters: Optional[List[FilterSelectionItem]] = None
+
+
+@router.post("/datasources/{source_id}/discover-filters")
+async def discover_filters(
+    source_id: str,
+    resource_path: str = Query(...),
+):
+    """Run filter & pivot discovery agents on a data source resource."""
+    source = _get_source(source_id)
+    try:
+        import pandas as pd
+        from app.agents.filter_discovery import DiscoveryManager
+        from app.agents.chart_engine import ChartEngine
+
+        connector = ConnectorFactory.create_connector(
+            source["source_type"], source["connection_config"]
+        )
+        await connector.connect()
+        rows = await connector.sample_data(resource_path, sample_size=50000, method="first")
+        await connector.disconnect()
+
+        df = pd.DataFrame(rows)
+        if df.empty:
+            raise HTTPException(status_code=400, detail="No data found for this resource.")
+
+        manager = DiscoveryManager()
+        result = await manager.discover(df, source_id, resource_path)
+
+        # Generate matplotlib charts
+        chart_engine = ChartEngine()
+        profiles_raw = [
+            {"column_name": p.column_name, "data_type": p.data_type.value,
+             "null_percentage": p.null_percentage, "mean_value": p.mean_value,
+             "unique_count": p.unique_count}
+            for p in manager._last_filter_metadata.column_profiles
+        ]
+        result["charts"] = {
+            "overview": chart_engine.generate_dataset_overview(df, profiles_raw),
+            "columns": chart_engine.generate_profile_charts(df, profiles_raw),
+        }
+
+        logger.info(
+            f"Filter discovery completed for {source_id}/{resource_path}: "
+            f"{result['filter_metadata']['dataset']['columns']} columns, "
+            f"{len(result['charts']['columns'])} charts"
+        )
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Filter discovery failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/datasources/{source_id}/apply-filters")
+async def apply_filters(source_id: str, request: ApplyFiltersRequest):
+    """Apply structured filters and return filtered data preview."""
+    source = _get_source(source_id)
+    try:
+        import pandas as pd
+        from app.agents.filter_discovery import DynamicFilterExecutor, UserFilterSelection
+
+        connector = ConnectorFactory.create_connector(
+            source["source_type"], source["connection_config"]
+        )
+        await connector.connect()
+        rows = await connector.sample_data(request.resource_path, sample_size=50000, method="first")
+        await connector.disconnect()
+
+        df = pd.DataFrame(rows)
+        selections = [
+            UserFilterSelection(
+                column=f.column,
+                filter_type=f.filter_type,
+                selected_values=f.selected_values,
+                min_value=f.min_value,
+                max_value=f.max_value,
+                text_pattern=f.text_pattern,
+                is_negated=f.is_negated,
+            )
+            for f in request.filters
+        ]
+
+        executor = DynamicFilterExecutor()
+        filtered_df, log = executor.apply_filters(df, selections)
+
+        # Generate before/after chart
+        filter_chart = None
+        try:
+            from app.agents.chart_engine import ChartEngine
+            chart_engine = ChartEngine()
+            filter_cols = [f.column for f in request.filters]
+            filter_chart = chart_engine.generate_filtered_chart(df, filtered_df, filter_cols)
+        except Exception as chart_err:
+            logger.warning(f"Filter chart generation failed: {chart_err}")
+
+        # Return preview (first 200 rows) + stats
+        preview_rows = filtered_df.head(200).to_dict(orient="records")
+        return {
+            "total_rows_before": len(df),
+            "total_rows_after": len(filtered_df),
+            "preview_rows": preview_rows,
+            "execution_log": log,
+            "chart": filter_chart,
+        }
+
+    except Exception as e:
+        logger.error(f"Apply filters failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/datasources/{source_id}/apply-pivot")
+async def apply_pivot(source_id: str, request: ApplyPivotRequest):
+    """Apply pivot operations on (optionally filtered) data."""
+    source = _get_source(source_id)
+    try:
+        import pandas as pd
+        from app.agents.filter_discovery import (
+            DynamicFilterExecutor, DynamicPivotExecutor,
+            UserFilterSelection, UserPivotSelection,
+        )
+
+        connector = ConnectorFactory.create_connector(
+            source["source_type"], source["connection_config"]
+        )
+        await connector.connect()
+        rows = await connector.sample_data(request.resource_path, sample_size=50000, method="first")
+        await connector.disconnect()
+
+        df = pd.DataFrame(rows)
+
+        # Apply filters first (if any)
+        if request.filters:
+            selections = [
+                UserFilterSelection(
+                    column=f.column,
+                    filter_type=f.filter_type,
+                    selected_values=f.selected_values,
+                    min_value=f.min_value,
+                    max_value=f.max_value,
+                    text_pattern=f.text_pattern,
+                    is_negated=f.is_negated,
+                )
+                for f in request.filters
+            ]
+            executor = DynamicFilterExecutor()
+            df, _ = executor.apply_filters(df, selections)
+
+        # Apply pivot
+        pivot_sel = UserPivotSelection(
+            dimensions=request.dimensions,
+            measures=request.measures,
+        )
+        pivot_exec = DynamicPivotExecutor()
+        pivoted = pivot_exec.apply_pivot(df, pivot_sel)
+
+        # Generate pivot chart
+        pivot_chart = None
+        try:
+            from app.agents.chart_engine import ChartEngine
+            chart_engine = ChartEngine()
+            pivot_chart = chart_engine.generate_pivot_chart(
+                pivoted, request.dimensions, request.measures
+            )
+        except Exception as chart_err:
+            logger.warning(f"Pivot chart generation failed: {chart_err}")
+
+        return {
+            "total_rows_input": len(df),
+            "total_rows_output": len(pivoted),
+            "columns": list(pivoted.columns),
+            "rows": pivoted.head(500).to_dict(orient="records"),
+            "chart": pivot_chart,
+        }
+
+    except Exception as e:
+        logger.error(f"Apply pivot failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
