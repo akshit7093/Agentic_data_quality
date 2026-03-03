@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Filter, BarChart2, Table as TableIcon, AlertCircle, Loader2, Sparkles, X } from 'lucide-react';
+import { Filter, BarChart2, Table as TableIcon, AlertCircle, Loader2, Sparkles, X, Download } from 'lucide-react';
 import DataProfileDashboard from './DataProfileDashboard';
+import * as XLSX from 'xlsx';
 
 // ── Types ──────────────────────────────────────────────────────
 interface ColumnInfo {
@@ -184,6 +185,7 @@ export default function DataExplorer({
 
     // Pivot Builder state
     const [pivotDimension, setPivotDimension] = useState<string>('');
+    const [pivotDimension2, setPivotDimension2] = useState<string>('');  // Secondary (column) dimension
     const [pivotMeasure, setPivotMeasure] = useState<string>('');
     const [pivotAgg, setPivotAgg] = useState<string>('count');
     const [pivotResult, setPivotResult] = useState<Record<string, any>[] | null>(null);
@@ -263,7 +265,7 @@ export default function DataExplorer({
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     resource_path: resource.name,
-                    dimensions: [pivotDimension],
+                    dimensions: [pivotDimension, ...(pivotDimension2 ? [pivotDimension2] : [])],
                     measures: [{ column: pivotMeasure || '*', aggregation: pivotAgg }],
                     filters: sliceFilters.length > 0 ? sliceFilters : undefined,
                 }),
@@ -677,45 +679,60 @@ export default function DataExplorer({
                                     </div>
                                 )}
 
-                                {/* Manual builder */}
-                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col md:flex-row gap-4 items-end">
-                                    <div className="flex-1">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Dimension (Row)</label>
-                                        <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotDimension} onChange={e => setPivotDimension(e.target.value)}>
-                                            <option value="">Select Dimension...</option>
-                                            {Object.entries(pm.dimensions).map(([col, dim]) => (
-                                                <option key={col} value={col}>{dim.name}</option>
-                                            ))}
-                                        </select>
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col gap-4">
+                                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                                        <div className="flex-1">
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Row Dimension *</label>
+                                            <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotDimension} onChange={e => setPivotDimension(e.target.value)}>
+                                                <option value="">Select Dimension...</option>
+                                                {Object.entries(pm.dimensions).map(([col, dim]) => (
+                                                    <option key={col} value={col}>{dim.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Column Dimension <span className="text-gray-400 font-normal">(optional, cross-tab)</span></label>
+                                            <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotDimension2} onChange={e => setPivotDimension2(e.target.value)}>
+                                                <option value="">None</option>
+                                                {Object.entries(pm.dimensions)
+                                                    .filter(([col]) => col !== pivotDimension)
+                                                    .map(([col, dim]) => (
+                                                        <option key={col} value={col}>{dim.name}</option>
+                                                    ))}
+                                            </select>
+                                        </div>
                                     </div>
-                                    <div className="w-48">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Aggregation</label>
-                                        <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotAgg} onChange={e => setPivotAgg(e.target.value)}>
-                                            <option value="count">COUNT</option>
-                                            <option value="sum">SUM</option>
-                                            <option value="average">AVG</option>
-                                            <option value="min">MIN</option>
-                                            <option value="max">MAX</option>
-                                            <option value="median">MEDIAN</option>
-                                        </select>
+                                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                                        <div className="w-48">
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Aggregation</label>
+                                            <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotAgg} onChange={e => setPivotAgg(e.target.value)}>
+                                                <option value="count">COUNT</option>
+                                                <option value="count_distinct">COUNT DISTINCT</option>
+                                                <option value="sum">SUM</option>
+                                                <option value="average">AVG</option>
+                                                <option value="min">MIN</option>
+                                                <option value="max">MAX</option>
+                                                <option value="median">MEDIAN</option>
+                                            </select>
+                                        </div>
+                                        <div className="flex-1">
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Measure (Value)</label>
+                                            <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotMeasure} onChange={e => setPivotMeasure(e.target.value)} disabled={pivotAgg === 'count'}>
+                                                <option value="">Select Measure...</option>
+                                                {Object.entries(pm.measures).map(([col, meas]) => (
+                                                    <option key={col} value={col}>{meas.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <button
+                                            onClick={handleGeneratePivot}
+                                            disabled={!pivotDimension || (pivotAgg !== 'count' && !pivotMeasure) || pivotLoading}
+                                            className="btn-primary py-2 px-6 disabled:opacity-50 flex items-center gap-2"
+                                        >
+                                            {pivotLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                                            Generate
+                                        </button>
                                     </div>
-                                    <div className="flex-1">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Measure (Value)</label>
-                                        <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotMeasure} onChange={e => setPivotMeasure(e.target.value)} disabled={pivotAgg === 'count'}>
-                                            <option value="">Select Measure...</option>
-                                            {Object.entries(pm.measures).map(([col, meas]) => (
-                                                <option key={col} value={col}>{meas.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                    <button
-                                        onClick={handleGeneratePivot}
-                                        disabled={!pivotDimension || (pivotAgg !== 'count' && !pivotMeasure) || pivotLoading}
-                                        className="btn-primary py-2 px-6 disabled:opacity-50 flex items-center gap-2"
-                                    >
-                                        {pivotLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                                        Generate
-                                    </button>
                                 </div>
 
                                 {pivotResult && (
@@ -728,8 +745,60 @@ export default function DataExplorer({
                                         )}
                                         {/* Pivot Table */}
                                         <div className="border border-gray-200 rounded-lg overflow-hidden">
-                                            <div className="bg-white p-3 border-b border-gray-200">
+                                            <div className="bg-white p-3 border-b border-gray-200 flex items-center justify-between">
                                                 <h4 className="font-medium text-sm text-gray-700">Server-Side Pivot Results ({pivotResult.length} groups)</h4>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        onClick={() => {
+                                                            if (!pivotResult || pivotResult.length === 0) return;
+                                                            const headers = Object.keys(pivotResult[0]);
+                                                            const csvRows = [headers.join(',')];
+                                                            pivotResult.forEach(row => {
+                                                                csvRows.push(headers.map(h => {
+                                                                    const v = row[h];
+                                                                    const s = String(v ?? '');
+                                                                    return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+                                                                }).join(','));
+                                                            });
+                                                            const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+                                                            const a = document.createElement('a');
+                                                            a.href = URL.createObjectURL(blob);
+                                                            a.download = `pivot_${resource?.name || 'data'}_${new Date().toISOString().slice(0, 10)}.csv`;
+                                                            a.click();
+                                                        }}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                                        title="Export as CSV"
+                                                    >
+                                                        <Download className="w-3.5 h-3.5" /> CSV
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (!pivotResult || pivotResult.length === 0) return;
+                                                            const ws = XLSX.utils.json_to_sheet(pivotResult);
+                                                            const wb = XLSX.utils.book_new();
+                                                            XLSX.utils.book_append_sheet(wb, ws, 'Pivot');
+                                                            XLSX.writeFile(wb, `pivot_${resource?.name || 'data'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                                                        }}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-md hover:bg-green-700 transition-colors"
+                                                        title="Export as Excel"
+                                                    >
+                                                        <Download className="w-3.5 h-3.5" /> Excel
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            if (!pivotResult || pivotResult.length === 0) return;
+                                                            const blob = new Blob([JSON.stringify(pivotResult, null, 2)], { type: 'application/json' });
+                                                            const a = document.createElement('a');
+                                                            a.href = URL.createObjectURL(blob);
+                                                            a.download = `pivot_${resource?.name || 'data'}_${new Date().toISOString().slice(0, 10)}.json`;
+                                                            a.click();
+                                                        }}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                                        title="Export as JSON"
+                                                    >
+                                                        <Download className="w-3.5 h-3.5" /> JSON
+                                                    </button>
+                                                </div>
                                             </div>
                                             <div className="overflow-x-auto max-h-[400px]">
                                                 <table className="min-w-full divide-y divide-gray-200">

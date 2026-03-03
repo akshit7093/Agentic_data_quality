@@ -15,6 +15,7 @@ Filters are applied in order — order matters for correctness.
 import re
 import logging
 from typing import List, Callable, Optional
+from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
@@ -304,3 +305,99 @@ def get_sanitizer() -> LLMResponseSanitizer:
 def sanitize_llm_response(raw: str) -> str:
     """Convenience function — sanitize using global singleton."""
     return get_sanitizer().sanitize(raw)
+
+
+# ═══════════════════════════════════════════════════════════
+# PROTOCOL VALIDATION — check if response matches expected format
+# ═══════════════════════════════════════════════════════════
+
+@dataclass
+class ProtocolCheckResult:
+    """Result of protocol validation."""
+    is_valid: bool
+    violation_type: Optional[str] = None  # "no_json", "no_tag", "empty", "malformed_json"
+    correction_hint: Optional[str] = None
+
+
+def validate_protocol(
+    response: str,
+    expected: str = "json_or_tag",
+) -> ProtocolCheckResult:
+    """
+    Validate whether a sanitized LLM response matches our agent protocol.
+    
+    Args:
+        response: The sanitized LLM response text.
+        expected: What we expect — "json_or_tag", "json_only", "tag_only", "json_array"
+    
+    Returns:
+        ProtocolCheckResult with is_valid, violation_type, and correction_hint.
+    """
+    if not response or not response.strip():
+        return ProtocolCheckResult(
+            is_valid=False,
+            violation_type="empty",
+            correction_hint=(
+                "Your response was empty or was truncated. "
+                "Please output a complete response."
+            ),
+        )
+
+    has_json_fence = bool(re.search(r'```(?:json)?\s*[\s\S]*?```', response, re.IGNORECASE))
+    has_raw_json_obj = bool(re.search(r'\{[\s\S]*"action"\s*:', response))
+    has_structural_tag = bool(re.search(
+        r'<(?:METADATA|REPORT)>[\s\S]*?</(?:METADATA|REPORT)>', response, re.IGNORECASE
+    ))
+    has_json_array = bool(re.search(r'\[[\s\S]*\]', response))
+
+    if expected == "json_or_tag":
+        if has_json_fence or has_raw_json_obj or has_structural_tag:
+            return ProtocolCheckResult(is_valid=True)
+        return ProtocolCheckResult(
+            is_valid=False,
+            violation_type="no_json",
+            correction_hint=(
+                "Your response did not contain a valid JSON action block or a "
+                "<METADATA>/<REPORT> structural tag. Please output exactly ONE of: "
+                "(1) A ```json block with an execute_query action, or "
+                "(2) Your final <METADATA> or <REPORT> block."
+            ),
+        )
+
+    elif expected == "json_only":
+        if has_json_fence or has_raw_json_obj:
+            return ProtocolCheckResult(is_valid=True)
+        return ProtocolCheckResult(
+            is_valid=False,
+            violation_type="no_json",
+            correction_hint=(
+                "Your response must contain a JSON block. "
+                "Please output a ```json block with the required action."
+            ),
+        )
+
+    elif expected == "json_array":
+        if has_json_array:
+            return ProtocolCheckResult(is_valid=True)
+        return ProtocolCheckResult(
+            is_valid=False,
+            violation_type="no_json",
+            correction_hint=(
+                "Your response must be a JSON array. "
+                "Please output a raw JSON array like [{...}, {...}]."
+            ),
+        )
+
+    elif expected == "tag_only":
+        if has_structural_tag:
+            return ProtocolCheckResult(is_valid=True)
+        return ProtocolCheckResult(
+            is_valid=False,
+            violation_type="no_tag",
+            correction_hint=(
+                "Your response must contain a <METADATA> or <REPORT> block. "
+                "Please output the required structural tag."
+            ),
+        )
+
+    return ProtocolCheckResult(is_valid=True)

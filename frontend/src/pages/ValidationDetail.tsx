@@ -14,14 +14,20 @@ import {
   Filter,
   Bot,
   Ticket,
-  Loader2
+  Loader2,
+  Download,
+  PieChart,
+  ChevronDown,
 } from 'lucide-react';
 import { useValidationStatus, useValidationResults } from '@/hooks/useValidations';
 import ExecutionTraceViewer from '@/components/ExecutionTraceViewer';
+import ValidationCharts from '@/components/ValidationCharts';
+import * as XLSX from 'xlsx';
 
 export default function ValidationDetail() {
   const { id } = useParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState<'results' | 'logs'>('results');
+  const [activeTab, setActiveTab] = useState<'results' | 'charts' | 'logs'>('results');
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   // Filters
   const [severityFilter, setSeverityFilter] = useState<string>('all');
@@ -303,6 +309,88 @@ export default function ValidationDetail() {
           </div>
         </div>
         <div className="flex items-center space-x-3">
+          {/* Export Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              className="btn-secondary flex items-center"
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export
+              <ChevronDown className="w-3 h-3 ml-1" />
+            </button>
+            {showExportMenu && (
+              <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
+                <button
+                  onClick={() => {
+                    setShowExportMenu(false);
+                    if (!results.length) return;
+                    const headers = ['rule_name', 'rule_type', 'severity', 'status', 'passed_count', 'failed_count', 'ai_insights'];
+                    const csvRows = [headers.join(',')];
+                    results.forEach((r: any) => {
+                      csvRows.push(headers.map(h => {
+                        const v = String(r[h] ?? '').replace(/"/g, '""');
+                        return v.includes(',') || v.includes('"') ? `"${v}"` : v;
+                      }).join(','));
+                    });
+                    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `validation_${id}_results.csv`;
+                    a.click();
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                >
+                  <Download className="w-3.5 h-3.5 mr-2" /> CSV
+                </button>
+                <button
+                  onClick={() => {
+                    setShowExportMenu(false);
+                    if (!results.length) return;
+                    const ws = XLSX.utils.json_to_sheet(results.map((r: any) => ({
+                      'Rule Name': r.rule_name,
+                      'Type': r.rule_type,
+                      'Severity': r.severity,
+                      'Status': r.status,
+                      'Passed': r.passed_count ?? '',
+                      'Failed': r.failed_count ?? '',
+                      'AI Insight': r.ai_insights ?? '',
+                    })));
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, 'Validation Results');
+                    XLSX.writeFile(wb, `validation_${id}_results.xlsx`);
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                >
+                  <Download className="w-3.5 h-3.5 mr-2" /> Excel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowExportMenu(false);
+                    if (!results.length) return;
+                    const blob = new Blob([JSON.stringify({ validation, results }, null, 2)], { type: 'application/json' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = `validation_${id}_results.json`;
+                    a.click();
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                >
+                  <Download className="w-3.5 h-3.5 mr-2" /> JSON
+                </button>
+                <div className="border-t border-gray-100 my-1" />
+                <button
+                  onClick={() => {
+                    setShowExportMenu(false);
+                    window.open(`http://localhost:8000/api/v1/validate/${id}/export?format=pdf`, '_blank');
+                  }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                >
+                  <Download className="w-3.5 h-3.5 mr-2" /> PDF Report
+                </button>
+              </div>
+            )}
+          </div>
           <Link to="/validations/new" className="btn-secondary">
             <RefreshCw className="w-4 h-4 mr-2" />
             Re-run
@@ -514,6 +602,16 @@ export default function ValidationDetail() {
           Validation Results
         </button>
         <button
+          onClick={() => setActiveTab('charts')}
+          className={`pb-4 px-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'charts'
+            ? 'border-primary-500 text-primary-600'
+            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+        >
+          <PieChart className="w-4 h-4 mr-2" />
+          Charts
+        </button>
+        <button
           onClick={() => setActiveTab('logs')}
           className={`pb-4 px-4 text-sm font-medium border-b-2 transition-colors flex items-center ${activeTab === 'logs'
             ? 'border-primary-500 text-primary-600'
@@ -524,6 +622,11 @@ export default function ValidationDetail() {
           Agent Execution Log
         </button>
       </div>
+
+      {/* Charts Tab */}
+      {activeTab === 'charts' && (
+        <ValidationCharts results={results} qualityScore={qualityScore} />
+      )}
 
       {/* Validation Results Tab */}
       {activeTab === 'results' && (

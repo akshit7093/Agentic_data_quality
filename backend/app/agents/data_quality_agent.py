@@ -21,7 +21,7 @@ from app.agents.state import (
 )
 from app.agents.llm_service import get_llm_service
 from app.agents.rag_service import get_rag_service
-from app.agents.llm_sanitizer import sanitize_llm_response
+from app.agents.llm_sanitizer import sanitize_llm_response, validate_protocol
 from app.connectors.factory import ConnectorFactory
 from app.core.config import get_settings
 
@@ -319,14 +319,19 @@ Step {exploration_steps}/{MAX_EXPLORATION_STEPS}. Output ONE query JSON or your 
             prompt=prompt,
             system_prompt=self.exploration_prompt,
             max_tokens=LLM_MAX_TOKENS,
-            temperature=0.1  # Lower temp for more deterministic output
+            temperature=0.1
         )
         
         response = self._sanitize_llm_response(response)
         
-        # Handle empty/truncated response
-        if not response:
-            response = '{"action": "execute_query", "query": "SELECT COUNT(*) FROM ' + target_table + '", "query_type": "sql"}'
+        # Protocol validation — if the LLM broke format, inject a corrective message
+        check = validate_protocol(response, expected="json_or_tag")
+        if not check.is_valid:
+            logger.warning(f"Protocol violation ({check.violation_type}): injecting correction hint")
+            return {
+                "messages": [{"role": "user", "content": f"⚠️ {check.correction_hint}"}],
+                "exploration_steps": exploration_steps,
+            }
 
         logger.info(f"Agent Output: {response[:200]}...")
         return {
@@ -343,6 +348,7 @@ Step {exploration_steps}/{MAX_EXPLORATION_STEPS}. Output ONE query JSON or your 
         schema = state['data_source_info'].schema
         sample_data = state['data_source_info'].sample_data
         mode_str = state["validation_mode"].value
+        source_type = str(getattr(state['data_source_info'], 'source_type', 'sqlite')).lower()
 
         from app.agents.column_analysis_agent import ColumnAnalysisAgent
         
@@ -373,13 +379,14 @@ Step {exploration_steps}/{MAX_EXPLORATION_STEPS}. Output ONE query JSON or your 
             if "progress_callback" in state and callable(state["progress_callback"]):
                 state["progress_callback"](f"Analyzing column {col_name}...")
             
-            # Instantiate the specialized agent
+            # Instantiate the specialized agent with source_type for SQL/Pandas routing
             col_agent = ColumnAnalysisAgent(
                 column_name=col_name,
                 dtype=col_type,
                 samples=col_samples,
                 mode=mode_str,
-                engine_executor=query_executor
+                engine_executor=query_executor,
+                source_type=source_type,
             )
             
             # Run the agent for this specific column

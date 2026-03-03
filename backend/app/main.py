@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.api.routes import router as api_router
+from app.api.rule_routes import router as rule_router
 
 # Configure logging
 logging.basicConfig(
@@ -62,6 +63,7 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
+app.include_router(rule_router)  # Rule groups API (self-prefixed /api/v1/rules)
 
 # Static files for reports
 import os

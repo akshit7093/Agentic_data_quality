@@ -22,7 +22,7 @@ import {
 import { useDataSources } from '@/hooks/useDataSources';
 import { useSubmitValidation } from '@/hooks/useValidations';
 import { useLLMHealth } from '@/hooks/useSystem';
-import { dataSourceApi, fileApi } from '@/services/api';
+import { dataSourceApi, fileApi, ruleGroupApi } from '@/services/api';
 import Modal from '@/components/Modal';
 import DataExplorer from '@/components/DataExplorer';
 
@@ -126,12 +126,25 @@ export default function NewValidation() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  // Rule groups
+  const [ruleGroups, setRuleGroups] = useState<any[]>([]);
+  const [selectedRuleGroup, setSelectedRuleGroup] = useState<string>('');
+
   // Fetch resources when data source changes
   useEffect(() => {
     if (selectedDataSource && step === 'browse') {
       loadResources();
     }
   }, [selectedDataSource, step]);
+
+  // Fetch rule groups when entering config step
+  useEffect(() => {
+    if (step === 'config') {
+      ruleGroupApi.listGroups().then(data => {
+        setRuleGroups(data.groups || []);
+      }).catch(() => setRuleGroups([]));
+    }
+  }, [step]);
 
   const loadResources = async () => {
     setResourcesLoading(true);
@@ -914,6 +927,44 @@ export default function NewValidation() {
           Number of records to sample for validation
         </p>
       </div>
+
+      {/* Rule Group Selector — optional, shown for custom/hybrid modes */}
+      {['custom_rules', 'hybrid'].includes(validationMode) && ruleGroups.length > 0 && (
+        <div>
+          <label className="form-label">Apply Rule Group <span className="text-gray-400 font-normal">(optional)</span></label>
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            <label
+              className={`flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all ${!selectedRuleGroup ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'
+                }`}
+            >
+              <input
+                type="radio" name="ruleGroup" value=""
+                checked={!selectedRuleGroup}
+                onChange={() => setSelectedRuleGroup('')}
+              />
+              <span className="ml-2 text-sm font-medium text-gray-700">None — use only inline rules</span>
+            </label>
+            {ruleGroups.filter(g => g.is_active).map(g => (
+              <label
+                key={g.id}
+                className={`flex items-start p-3 border-2 rounded-lg cursor-pointer transition-all ${selectedRuleGroup === g.id ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:border-gray-300'
+                  }`}
+              >
+                <input
+                  type="radio" name="ruleGroup" value={g.id}
+                  checked={selectedRuleGroup === g.id}
+                  onChange={() => setSelectedRuleGroup(g.id)}
+                />
+                <div className="ml-2">
+                  <span className="text-sm font-medium text-gray-800">{g.name}</span>
+                  <span className="text-xs text-gray-500 ml-2">({g.rule_count} rules)</span>
+                  {g.description && <p className="text-xs text-gray-400 mt-0.5">{g.description}</p>}
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Custom Rules Builder */}
       {['custom_rules', 'hybrid'].includes(validationMode) && (

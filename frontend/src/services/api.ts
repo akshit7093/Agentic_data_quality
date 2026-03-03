@@ -78,4 +78,27 @@ export const fileApi = {
   },
 };
 
+// Rule Groups — self-prefixed routes at /api/v1/rules
+const rulesBase = 'http://localhost:8000/api/v1/rules';
+export const ruleGroupApi = {
+  // Groups
+  listGroups: () =>
+    axios.get(`${rulesBase}/groups`).then(r => r.data),
+  createGroup: (data: { name: string; description?: string; target_files?: string[] }) =>
+    axios.post(`${rulesBase}/groups`, data).then(r => r.data),
+  getGroup: (id: string) =>
+    axios.get(`${rulesBase}/groups/${id}`).then(r => r.data),
+  updateGroup: (id: string, data: any) =>
+    axios.put(`${rulesBase}/groups/${id}`, data).then(r => r.data),
+  deleteGroup: (id: string) =>
+    axios.delete(`${rulesBase}/groups/${id}`).then(r => r.data),
+  // Rules within groups
+  addRule: (groupId: string, data: any) =>
+    axios.post(`${rulesBase}/groups/${groupId}/rules`, data).then(r => r.data),
+  updateRule: (groupId: string, ruleId: string, data: any) =>
+    axios.put(`${rulesBase}/groups/${groupId}/rules/${ruleId}`, data).then(r => r.data),
+  deleteRule: (groupId: string, ruleId: string) =>
+    axios.delete(`${rulesBase}/groups/${groupId}/rules/${ruleId}`).then(r => r.data),
+};
+
 export default api;
