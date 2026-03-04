@@ -352,24 +352,17 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
             raise
 
     async def check_health(self) -> Dict[str, Any]:
-        """Check LLM service health."""
-        try:
-            response = await self.generate(
-                prompt="Respond with exactly: healthy",
-                max_tokens=10
-            )
-            return {
-                "status": "healthy",
-                "provider": self.settings.LLM_PROVIDER,
-                "model": self._get_model_name(),
-                "response": response.strip(),
-            }
-        except Exception as e:
-            return {
-                "status": "unhealthy",
-                "provider": self.settings.LLM_PROVIDER,
-                "error": str(e),
-            }
+        """Check LLM service health without interrupting active generations."""
+        # We disabled the actual LLM call here because for local models (like LMStudio),
+        # hitting the completion endpoint for healthchecks interrupts long-running
+        # reasoning validation tasks.
+        return {
+            "status": "healthy",
+            "provider": self.settings.LLM_PROVIDER,
+            "model": self._get_model_name(),
+            "response": "healthy",
+            "note": "LLM call disabled for healthcheck to avoid interrupting active generations"
+        }
 
     def _get_model_name(self) -> str:
         """Get current model name."""

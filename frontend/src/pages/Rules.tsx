@@ -207,6 +207,10 @@ export default function Rules() {
 
   // ── Helpers ───────────────────────────────────────────────
 
+  const getTargetFilesForGroup = (groupId: string) => {
+    return groups.find(g => g.id === groupId)?.target_files || [];
+  };
+
   const getRuleTypeIcon = (type: string) => {
     switch (type) {
       case 'column': return <ListChecks size={14} />;
@@ -538,15 +542,40 @@ export default function Rules() {
             </div>
             <div>
               <label style={{ fontSize: 12, color: '#94a3b8', display: 'block', marginBottom: 4 }}>Target File</label>
-              <input
-                value={ruleForm.target_file}
-                onChange={e => setRuleForm(p => ({ ...p, target_file: e.target.value }))}
-                placeholder="customers.csv"
-                style={{
-                  width: '100%', padding: '8px 10px', borderRadius: 6,
-                  border: '1px solid #334155', background: '#0f172a', color: '#f1f5f9', fontSize: 13,
-                }}
-              />
+              {(() => {
+                const activeGroupId = showAddRuleModal || editingRule?.groupId;
+                const groupFiles = activeGroupId ? getTargetFilesForGroup(activeGroupId) : [];
+
+                if (groupFiles.length > 0) {
+                  return (
+                    <select
+                      value={ruleForm.target_file}
+                      onChange={e => setRuleForm(p => ({ ...p, target_file: e.target.value }))}
+                      style={{
+                        width: '100%', padding: '8px 10px', borderRadius: 6,
+                        border: '1px solid #334155', background: '#0f172a', color: '#f1f5f9', fontSize: 13,
+                      }}
+                    >
+                      <option value="">-- Apply to any --</option>
+                      {groupFiles.map(f => (
+                        <option value={f} key={f}>{f}</option>
+                      ))}
+                    </select>
+                  );
+                }
+
+                return (
+                  <input
+                    value={ruleForm.target_file}
+                    onChange={e => setRuleForm(p => ({ ...p, target_file: e.target.value }))}
+                    placeholder="e.g., customers.csv"
+                    style={{
+                      width: '100%', padding: '8px 10px', borderRadius: 6,
+                      border: '1px solid #334155', background: '#0f172a', color: '#f1f5f9', fontSize: 13,
+                    }}
+                  />
+                );
+              })()}
             </div>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>

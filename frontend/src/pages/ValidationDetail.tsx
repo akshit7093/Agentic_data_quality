@@ -19,10 +19,12 @@ import {
   PieChart,
   ChevronDown,
 } from 'lucide-react';
-import { useValidationStatus, useValidationResults } from '@/hooks/useValidations';
 import ExecutionTraceViewer from '@/components/ExecutionTraceViewer';
 import ValidationCharts from '@/components/ValidationCharts';
 import * as XLSX from 'xlsx';
+import { useValidationStatus, useValidationResults } from '@/hooks/useValidations';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 export default function ValidationDetail() {
   const { id } = useParams<{ id: string }>();
@@ -163,6 +165,71 @@ export default function ValidationDetail() {
     return 'text-danger-600';
   };
 
+
+  const generatePDF = async () => {
+    setShowExportMenu(false);
+    if (!validation || !results.length) return;
+
+    try {
+      const doc = new jsPDF('p', 'mm', 'a4');
+      const targetFile = (validation as any).target_file || id.slice(0, 8);
+
+      // Title
+      doc.setFontSize(20);
+      doc.setTextColor(30, 41, 59);
+      doc.text(`Data Quality Report: ${targetFile}`, 14, 20);
+
+      doc.setFontSize(12);
+      doc.setTextColor(100, 116, 139);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 28);
+
+      const pass = results.filter((r: any) => r.status === 'passed').length;
+      const fail = results.filter((r: any) => r.status === 'failed').length;
+      const warn = results.filter((r: any) => r.status === 'warning').length;
+
+      doc.text(`Score: ${qualityScore}% | Passed: ${pass} | Failed: ${fail} | Warnings: ${warn}`, 14, 36);
+
+      // We need to capture the charts area if we are on the charts tab
+      // For simplicity, we just add the table of results
+      doc.setFontSize(14);
+      doc.setTextColor(30, 41, 59);
+      doc.text('Validation Details', 14, 50);
+
+      const tableData = results.map((r: any) => [
+        r.rule_name,
+        r.rule_type,
+        r.severity.toUpperCase(),
+        r.status.toUpperCase(),
+        r.passed_count ?? '-',
+        r.failed_count ?? '-',
+      ]);
+
+      autoTable(doc, {
+        startY: 55,
+        head: [['Rule', 'Type', 'Severity', 'Status', 'Pass', 'Fail']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [99, 102, 241] },
+        styles: { fontSize: 9 },
+        columnStyles: {
+          2: { halign: 'center' },
+          3: { halign: 'center', fontStyle: 'bold' },
+        },
+        didParseCell: function (data) {
+          if (data.section === 'body' && data.column.index === 3) {
+            if (data.cell.raw === 'PASSED') data.cell.styles.textColor = [34, 197, 94];
+            else if (data.cell.raw === 'FAILED') data.cell.styles.textColor = [239, 68, 68];
+            else if (data.cell.raw === 'WARNING') data.cell.styles.textColor = [245, 158, 11];
+          }
+        }
+      });
+
+      doc.save(`DQ_Report_${targetFile}_${id!.slice(0, 8)}.pdf`);
+    } catch (err) {
+      console.error('Failed to generate PDF:', err);
+      alert('Failed to generate PDF report.');
+    }
+  };
 
   // Loading state
   if (statusLoading) {
@@ -380,10 +447,7 @@ export default function ValidationDetail() {
                 </button>
                 <div className="border-t border-gray-100 my-1" />
                 <button
-                  onClick={() => {
-                    setShowExportMenu(false);
-                    window.open(`http://localhost:8000/api/v1/validate/${id}/export?format=pdf`, '_blank');
-                  }}
+                  onClick={generatePDF}
                   className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
                 >
                   <Download className="w-3.5 h-3.5 mr-2" /> PDF Report
