@@ -47,7 +47,7 @@ class PostgreSQLConnector(BaseConnector):
         
         return f"{dialect}://{username}:{password}@{host}:{port}/{database}"
     
-    async def connect(self) -> bool:
+    async def connect(self, **kwargs) -> bool:
         """Establish database connection."""
         try:
             connection_string = self._build_connection_string()

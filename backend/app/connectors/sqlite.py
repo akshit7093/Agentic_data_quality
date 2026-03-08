@@ -47,7 +47,7 @@ class SQLiteConnector(BaseConnector):
         
         return f"sqlite:///{db_path}"
 
-    async def connect(self) -> bool:
+    async def connect(self, **kwargs) -> bool:
         """Establish database connection."""
         try:
             connection_string = self._build_connection_string()

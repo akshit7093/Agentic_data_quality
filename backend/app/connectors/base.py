@@ -46,7 +46,7 @@ class BaseConnector(ABC):
         return self._is_connected
     
     @abstractmethod
-    async def connect(self) -> bool:
+    async def connect(self, **kwargs) -> bool:
         """Establish connection to data source.
         
         Returns:

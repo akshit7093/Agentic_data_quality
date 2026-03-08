@@ -72,7 +72,7 @@ class LocalFileConnector(FileConnector):
             return pd.DataFrame()
         return pd.concat(frames, ignore_index=True)
     
-    async def connect(self) -> bool:
+    async def connect(self, **kwargs) -> bool:
         """Verify base path exists."""
         if self.base_path and not os.path.exists(self.base_path):
             raise ValueError(f"Base path does not exist: {self.base_path}")
