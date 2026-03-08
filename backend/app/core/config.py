@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     
     # Ollama Settings
     OLLAMA_BASE_URL: str = Field(default="http://localhost:11434", env="OLLAMA_BASE_URL")
-    OLLAMA_MODEL: str = Field(default="llama3.2", env="OLLAMA_MODEL")
+    OLLAMA_MODEL: str = Field(default="qwen3.5:397b-cloud", env="OLLAMA_MODEL")
     
     # LM Studio Settings
     LMSTUDIO_BASE_URL: str = Field(default="http://localhost:1234/v1", env="LMSTUDIO_BASE_URL")
@@ -50,6 +50,25 @@ class Settings(BaseSettings):
     # Anthropic Settings
     ANTHROPIC_API_KEY: Optional[str] = Field(default=None, env="ANTHROPIC_API_KEY")
     ANTHROPIC_MODEL: str = Field(default="claude-3-5-sonnet-20241022", env="ANTHROPIC_MODEL")
+    
+    # Google Gemini Settings
+    GEMINI_API_KEY: Optional[str] = Field(default=None, env="GEMINI_API_KEY")
+    GEMINI_MODEL: str = Field(default="gemini-2.5-pro", env="GEMINI_MODEL")
+    GEMINI_RPM_LIMIT: int = Field(default=15, env="GEMINI_RPM_LIMIT")  # Requests per minute
+    GEMINI_TPM_LIMIT: int = Field(default=250000, env="GEMINI_TPM_LIMIT")  # Tokens per minute
+    GEMINI_RPD_LIMIT: int = Field(default=2000, env="GEMINI_RPD_LIMIT")  # Requests per day
+    GEMINI_COOLDOWN_SEC: float = Field(default=4.0, env="GEMINI_COOLDOWN_SEC")  # Gap between requests
+    
+    # Groq Settings
+    # Use a comma-separated list of keys for round-robin rotation
+    GROQ_API_KEYS: Optional[str] = Field(default=None, env="GROQ_API_KEYS")
+    GROQ_MODEL: str = Field(default="llama-3.2-90b-vision-preview", env="GROQ_MODEL")
+    
+    # OpenRouter Settings
+    # Use a comma-separated list of keys for round-robin rotation
+    OPENROUTER_API_KEYS: Optional[str] = Field(default=None, env="OPENROUTER_API_KEYS")
+    OPENROUTER_MODEL: str = Field(default="deepseek/deepseek-r1", env="OPENROUTER_MODEL")
+    OPENROUTER_BASE_URL: str = Field(default="https://openrouter.ai/api/v1", env="OPENROUTER_BASE_URL")
     
     # Embedding Settings
     EMBEDDING_PROVIDER: str = Field(default="ollama", env="EMBEDDING_PROVIDER")

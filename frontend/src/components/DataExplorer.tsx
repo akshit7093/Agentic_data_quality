@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Filter, BarChart2, Table as TableIcon, AlertCircle, Loader2, Sparkles, X, Download } from 'lucide-react';
 import DataProfileDashboard from './DataProfileDashboard';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 // ── Types ──────────────────────────────────────────────────────
 interface ColumnInfo {
@@ -158,12 +158,12 @@ function toSemantic(disco: string): SemanticType {
 // ── Semantic badge colors ──────────────────────────────────────
 function semanticColor(t: SemanticType): string {
     const colors: Record<string, string> = {
-        categorical: 'bg-purple-100 text-purple-800',
-        numeric: 'bg-blue-100 text-blue-800',
-        datetime: 'bg-green-100 text-green-800',
-        boolean: 'bg-yellow-100 text-yellow-800',
-        text: 'bg-gray-100 text-gray-800',
-        unknown: 'bg-gray-100 text-gray-800',
+        categorical: 'bg-purple-500/20 text-purple-300',
+        numeric: 'bg-blue-500/20 text-blue-300',
+        datetime: 'bg-emerald-500/20 text-emerald-300',
+        boolean: 'bg-yellow-500/20 text-yellow-300',
+        text: 'bg-royal-green-800 text-slate-200',
+        unknown: 'bg-royal-green-800 text-slate-200',
     };
     return colors[t] || colors.unknown;
 }
@@ -299,20 +299,23 @@ export default function DataExplorer({
         const activeFilter = colFilters.find(f => f.type === activeFilterType) || recommended || colFilters[0];
 
         if (!activeFilter) {
-            return <p className="text-xs text-gray-400 italic">No filter options available</p>;
+            return <p className="text-xs text-slate-500 italic">No filter options available</p>;
         }
 
         // Select which filter type to use
         const filterTypeSelector = colFilters.length > 1 ? (
-            <select
-                className="text-xs border-gray-200 rounded bg-gray-100 px-1 py-0.5 mb-2 w-full"
-                value={activeFilterType}
-                onChange={e => setColumnFilter(colName, { filter_type: e.target.value, selected_values: undefined, min_value: undefined, max_value: undefined, text_pattern: undefined })}
-            >
-                {colFilters.filter(f => f.type !== 'is_null' && f.type !== 'is_not_null').map(f => (
-                    <option key={f.type} value={f.type}>{f.name}{f.recommended ? ' ★' : ''}</option>
-                ))}
-            </select>
+            <div className="mb-2">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 block">Logic Operator</label>
+                <select
+                    className="w-full text-xs border-royal-green-600 rounded-lg bg-royal-green-800 text-slate-200 px-2 py-1.5 focus:ring-primary focus:border-primary uppercase font-bold"
+                    value={activeFilterType}
+                    onChange={e => setColumnFilter(colName, { filter_type: e.target.value, selected_values: undefined, min_value: undefined, max_value: undefined, text_pattern: undefined })}
+                >
+                    {colFilters.filter(f => f.type !== 'is_null' && f.type !== 'is_not_null').map(f => (
+                        <option key={f.type} value={f.type}>{f.name}{f.recommended ? ' ★' : ''}</option>
+                    ))}
+                </select>
+            </div>
         ) : null;
 
         // ── Build the specific UI control ──
@@ -323,13 +326,13 @@ export default function DataExplorer({
             const values = activeFilter.config.values || [];
             const selected = new Set(draft?.selected_values || []);
             control = (
-                <div className="space-y-1 max-h-36 overflow-y-auto border border-gray-200 rounded p-1.5 bg-white">
+                <div className="space-y-1 max-h-36 overflow-y-auto border border-royal-green-600 rounded-lg p-1.5 bg-black/20 custom-scrollbar">
                     {values.slice(0, 50).map(v => (
-                        <label key={v} className="flex items-center gap-2 py-0.5 text-sm hover:bg-gray-50 px-1 rounded cursor-pointer">
+                        <label key={v} className="flex items-center gap-2 py-1 px-2 text-xs font-bold uppercase tracking-tight hover:bg-royal-green-800 rounded cursor-pointer transition-colors text-slate-400 hover:text-slate-100">
                             <input
                                 type="checkbox"
                                 checked={selected.has(v)}
-                                className="rounded border-gray-300"
+                                className="rounded border-royal-green-600 bg-royal-green-900 text-primary focus:ring-primary"
                                 onChange={e => {
                                     const next = new Set(selected);
                                     e.target.checked ? next.add(v) : next.delete(v);
@@ -339,14 +342,14 @@ export default function DataExplorer({
                             <span className="truncate">{v}</span>
                         </label>
                     ))}
-                    {values.length > 50 && <p className="text-xs text-gray-400 px-1">...and {values.length - 50} more</p>}
+                    {values.length > 50 && <p className="text-[10px] text-slate-600 px-2 py-1 font-black uppercase">And {values.length - 50} other vectors</p>}
                 </div>
             );
         } else if (activeFilterType === 'single_select') {
             const values = activeFilter.config.values || [];
             control = (
                 <select
-                    className="w-full text-sm border-gray-300 rounded p-2 bg-white"
+                    className="w-full text-sm border-royal-green-600 rounded p-2 bg-royal-green-900"
                     value={draft?.selected_values?.[0] || ''}
                     onChange={e => setColumnFilter(colName, { filter_type: 'single_select', selected_values: e.target.value ? [e.target.value] : [] })}
                 >
@@ -359,16 +362,16 @@ export default function DataExplorer({
                 <div className="flex items-center gap-2">
                     <input
                         type="number"
-                        placeholder="Min"
-                        className="w-1/2 text-sm border-gray-300 rounded p-2"
+                        placeholder="MIN"
+                        className="w-1/2 text-xs font-mono font-bold border-royal-green-600 rounded-lg p-2.5 bg-royal-green-800 text-slate-200 focus:ring-primary focus:border-primary"
                         value={draft?.min_value ?? ''}
                         onChange={e => setColumnFilter(colName, { filter_type: activeFilterType, min_value: e.target.value ? Number(e.target.value) : undefined, max_value: draft?.max_value })}
                     />
-                    <span className="text-gray-400">→</span>
+                    <span className="text-slate-600 font-bold">→</span>
                     <input
                         type="number"
-                        placeholder="Max"
-                        className="w-1/2 text-sm border-gray-300 rounded p-2"
+                        placeholder="MAX"
+                        className="w-1/2 text-xs font-mono font-bold border-royal-green-600 rounded-lg p-2.5 bg-royal-green-800 text-slate-200 focus:ring-primary focus:border-primary"
                         value={draft?.max_value ?? ''}
                         onChange={e => setColumnFilter(colName, { filter_type: activeFilterType, max_value: e.target.value ? Number(e.target.value) : undefined, min_value: draft?.min_value })}
                     />
@@ -376,14 +379,14 @@ export default function DataExplorer({
             );
         } else if (activeFilterType === 'greater_than') {
             control = (
-                <input type="number" placeholder="Greater than..." className="w-full text-sm border-gray-300 rounded p-2"
+                <input type="number" placeholder="Greater than..." className="w-full text-sm border-royal-green-600 rounded p-2"
                     value={draft?.min_value ?? ''}
                     onChange={e => setColumnFilter(colName, { filter_type: 'greater_than', min_value: e.target.value ? Number(e.target.value) : undefined })}
                 />
             );
         } else if (activeFilterType === 'less_than') {
             control = (
-                <input type="number" placeholder="Less than..." className="w-full text-sm border-gray-300 rounded p-2"
+                <input type="number" placeholder="Less than..." className="w-full text-sm border-royal-green-600 rounded p-2"
                     value={draft?.max_value ?? ''}
                     onChange={e => setColumnFilter(colName, { filter_type: 'less_than', max_value: e.target.value ? Number(e.target.value) : undefined })}
                 />
@@ -391,11 +394,11 @@ export default function DataExplorer({
         } else if (activeFilterType === 'toggle') {
             const val = draft?.selected_values?.[0] || 'all';
             control = (
-                <div className="flex rounded-md overflow-hidden border border-gray-200">
+                <div className="flex rounded-md overflow-hidden border border-royal-green-600">
                     {['all', 'true', 'false'].map(v => (
                         <button
                             key={v}
-                            className={`flex-1 px-3 py-1.5 text-sm font-medium transition-colors ${val === v ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                            className={`flex-1 px-3 py-1.5 text-sm font-medium transition-colors ${val === v ? 'bg-primary text-white' : 'bg-royal-green-900 text-slate-400 hover:bg-royal-green-900/50'}`}
                             onClick={() => setColumnFilter(colName, { filter_type: 'toggle', selected_values: [v] })}
                         >
                             {v.charAt(0).toUpperCase() + v.slice(1)}
@@ -406,12 +409,12 @@ export default function DataExplorer({
         } else if (activeFilterType === 'date_range') {
             control = (
                 <div className="flex items-center gap-2">
-                    <input type="date" className="w-1/2 text-sm border-gray-300 rounded p-2"
+                    <input type="date" className="w-1/2 text-sm border-royal-green-600 rounded p-2"
                         value={draft?.min_value || ''}
                         onChange={e => setColumnFilter(colName, { filter_type: 'date_range', min_value: e.target.value, max_value: draft?.max_value })}
                     />
-                    <span className="text-gray-400">→</span>
-                    <input type="date" className="w-1/2 text-sm border-gray-300 rounded p-2"
+                    <span className="text-slate-500">→</span>
+                    <input type="date" className="w-1/2 text-sm border-royal-green-600 rounded p-2"
                         value={draft?.max_value || ''}
                         onChange={e => setColumnFilter(colName, { filter_type: 'date_range', max_value: e.target.value, min_value: draft?.min_value })}
                     />
@@ -420,7 +423,7 @@ export default function DataExplorer({
         } else if (activeFilterType === 'date_relative') {
             const presets = activeFilter.ui.config?.presets || ['last_7_days', 'last_30_days', 'last_90_days', 'last_year', 'this_year'];
             control = (
-                <select className="w-full text-sm border-gray-300 rounded p-2 bg-white"
+                <select className="w-full text-sm border-royal-green-600 rounded p-2 bg-royal-green-900"
                     value={draft?.text_pattern || ''}
                     onChange={e => setColumnFilter(colName, { filter_type: 'date_relative', text_pattern: e.target.value })}
                 >
@@ -429,9 +432,9 @@ export default function DataExplorer({
                 </select>
             );
         } else if (['text_contains', 'text_starts_with', 'text_ends_with', 'text_exact', 'text_regex', 'search'].includes(activeFilterType)) {
-            const placeholder = activeFilterType === 'search' ? 'Search...' : `${activeFilter.name}...`;
+            const placeholder = activeFilterType === 'search' ? 'TYPE TO SCAN...' : `${activeFilter.name.toUpperCase()}...`;
             control = (
-                <input type="text" placeholder={placeholder} className="w-full text-sm border-gray-300 rounded p-2"
+                <input type="text" placeholder={placeholder} className="w-full text-xs font-mono border-royal-green-600 rounded-lg p-2.5 bg-royal-green-800 text-slate-200 focus:ring-primary focus:border-primary"
                     value={draft?.text_pattern || ''}
                     onChange={e => setColumnFilter(colName, { filter_type: activeFilterType, text_pattern: e.target.value })}
                 />
@@ -450,8 +453,8 @@ export default function DataExplorer({
     // ── Loading / empty ──
     if (!resource || !previewData) {
         return (
-            <div className="flex flex-col items-center justify-center p-12 text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
-                <AlertCircle className="w-8 h-8 mb-2 text-gray-400" />
+            <div className="flex flex-col items-center justify-center p-12 text-slate-400 bg-royal-green-900/50 border border-royal-green-600 rounded-lg">
+                <AlertCircle className="w-8 h-8 mb-2 text-slate-500" />
                 <p>No preview data available to explore.</p>
                 <p className="text-sm mt-1">Please go back and ensure the resource can be previewed.</p>
             </div>
@@ -459,24 +462,24 @@ export default function DataExplorer({
     }
 
     return (
-        <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+        <div className="bg-royal-green-900 border border-royal-green-600 rounded-lg shadow-none overflow-hidden">
             {/* Tab bar */}
-            <div className="border-b border-gray-200 bg-gray-50 p-1 flex space-x-1">
+            <div className="border-b border-royal-green-600 bg-royal-green-900/50 p-1 flex space-x-1">
                 <button onClick={() => setActiveTab('columns')}
-                    className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'columns' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}
+                    className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'columns' ? 'bg-royal-green-900 text-primary shadow-none' : 'text-slate-400 hover:text-slate-100 hover:bg-royal-green-800'}`}
                 >
                     <TableIcon className="w-4 h-4 mr-2" /> Column Explorer
                 </button>
                 <button onClick={() => setActiveTab('filters')}
-                    className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'filters' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}
+                    className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'filters' ? 'bg-royal-green-900 text-primary shadow-none' : 'text-slate-400 hover:text-slate-100 hover:bg-royal-green-800'}`}
                 >
                     <Filter className="w-4 h-4 mr-2" /> Dynamic Filters
                     {sliceFilters.length > 0 && (
-                        <span className="ml-2 bg-primary-100 text-primary-700 text-xs px-1.5 py-0.5 rounded-full">{sliceFilters.length}</span>
+                        <span className="ml-2 bg-primary/20 text-primary text-xs px-1.5 py-0.5 rounded-full">{sliceFilters.length}</span>
                     )}
                 </button>
                 <button onClick={() => setActiveTab('pivot')}
-                    className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'pivot' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'}`}
+                    className={`flex items-center px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === 'pivot' ? 'bg-royal-green-900 text-primary shadow-none' : 'text-slate-400 hover:text-slate-100 hover:bg-royal-green-800'}`}
                 >
                     <BarChart2 className="w-4 h-4 mr-2" /> Pivot Builder
                 </button>
@@ -487,7 +490,7 @@ export default function DataExplorer({
                 {activeTab === 'columns' && (
                     <div>
                         {discoveryLoading ? (
-                            <div className="flex items-center justify-center py-12 text-gray-500">
+                            <div className="flex items-center justify-center py-12 text-slate-400">
                                 <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Analyzing columns...
                             </div>
                         ) : fm && fm.dataset_summary ? (
@@ -501,26 +504,26 @@ export default function DataExplorer({
                         ) : (
                             /* Fallback: simple table if no discovery data */
                             <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200">
-                                    <thead className="bg-gray-50">
+                                <table className="min-w-full divide-y divide-royal-green-600">
+                                    <thead className="bg-royal-green-900/50">
                                         <tr>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Column</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Missing %</th>
-                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unique</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Column</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Type</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Missing %</th>
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">Unique</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
+                                    <tbody className="bg-royal-green-900 divide-y divide-royal-green-600">
                                         {stats.map(s => (
-                                            <tr key={s.name} className="hover:bg-gray-50">
-                                                <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.name}</td>
+                                            <tr key={s.name} className="hover:bg-royal-green-900/50">
+                                                <td className="px-4 py-3 text-sm font-medium text-slate-100">{s.name}</td>
                                                 <td className="px-4 py-3">
                                                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${semanticColor(s.semanticType)}`}>
                                                         {s.semanticType}
                                                     </span>
                                                 </td>
                                                 <td className="px-4 py-3 text-sm">{s.nullPercent}%</td>
-                                                <td className="px-4 py-3 text-sm text-gray-500">{s.uniqueCount}</td>
+                                                <td className="px-4 py-3 text-sm text-slate-400">{s.uniqueCount}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -534,20 +537,20 @@ export default function DataExplorer({
                 {activeTab === 'filters' && (
                     <div className="space-y-4">
                         {discoveryLoading ? (
-                            <div className="flex items-center justify-center py-12 text-gray-500">
+                            <div className="flex items-center justify-center py-12 text-slate-400">
                                 <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Discovering filters...
                             </div>
                         ) : fm ? (
                             <>
                                 <div className="flex items-center justify-between">
-                                    <p className="text-sm text-gray-600">
+                                    <p className="text-sm text-slate-400">
                                         <Sparkles className="w-3.5 h-3.5 inline text-amber-500 mr-1" />
                                         Agent discovered filter options for {Object.keys(fm.filters).length} columns.
                                         Select values below, then click <strong>Apply Filters</strong>.
                                     </p>
                                     <div className="flex gap-2">
                                         {Object.keys(filterDraft).length > 0 && (
-                                            <button onClick={handleClearFilters} className="text-sm text-red-600 hover:text-red-700 flex items-center gap-1">
+                                            <button onClick={handleClearFilters} className="text-sm text-red-400 hover:text-red-400 flex items-center gap-1">
                                                 <X className="w-3.5 h-3.5" /> Clear All
                                             </button>
                                         )}
@@ -558,10 +561,10 @@ export default function DataExplorer({
                                 </div>
 
                                 {sliceFilters.length > 0 && (
-                                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex flex-wrap gap-2 items-center">
-                                        <span className="text-xs text-blue-700 font-medium">Active:</span>
+                                    <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-3 flex flex-wrap gap-2 items-center">
+                                        <span className="text-xs text-blue-400 font-medium">Active:</span>
                                         {sliceFilters.map((f, i) => (
-                                            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                            <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-300">
                                                 {f.column}: {f.filter_type}
                                                 {f.selected_values ? ` (${f.selected_values.length} values)` : ''}
                                                 {f.min_value != null || f.max_value != null ? ` [${f.min_value ?? ''}–${f.max_value ?? ''}]` : ''}
@@ -577,13 +580,14 @@ export default function DataExplorer({
                                         if (!col) return null;
                                         const sem = toSemantic(col.type);
                                         return (
-                                            <div key={colName} className="border border-gray-200 rounded-lg p-3 bg-gray-50 flex flex-col">
-                                                <label className="block text-sm font-medium text-gray-700 mb-1 truncate" title={colName}>
+                                            <div key={colName} className="border border-royal-green-700 rounded-xl p-4 bg-royal-green-900/40 hover:bg-royal-green-900/60 transition-all border-b-4 border-b-royal-green-600 flex flex-col group">
+                                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-1 truncate" title={colName}>
                                                     {colName}
-                                                    <span className={`ml-2 text-xs px-1.5 py-0.5 rounded-full ${semanticColor(sem)}`}>{sem}</span>
                                                 </label>
-                                                <div className="text-xs text-gray-400 mb-2">
-                                                    {col.stats.unique} unique · {col.stats.nullPercent}% null
+                                                <div className="flex items-center mb-3">
+                                                    <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-full border ${semanticColor(sem)}`}>{sem}</span>
+                                                    <span className="mx-2 text-[10px] text-slate-600 font-bold">·</span>
+                                                    <span className="text-[10px] text-slate-500 font-bold uppercase">{col.stats.unique} UNIQUE</span>
                                                 </div>
                                                 {renderFilterControl(colName)}
                                             </div>
@@ -594,19 +598,19 @@ export default function DataExplorer({
                         ) : (
                             /* Fallback: old simple filter UI if discovery hasn't run */
                             <div className="space-y-4">
-                                <p className="text-sm text-gray-600 mb-4">
+                                <p className="text-sm text-slate-400 mb-4">
                                     Select columns below to drill down and create dataset slices before running validation.
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {stats.map(s => {
                                         const isDropdown = s.semanticType === 'categorical' || s.semanticType === 'boolean';
                                         return (
-                                            <div key={s.name} className="border border-gray-200 rounded p-3 bg-gray-50 flex flex-col">
-                                                <label className="block text-sm font-medium text-gray-700 mb-2 truncate" title={s.name}>
-                                                    {s.name} <span className="text-xs text-gray-400 font-normal ml-1">({s.semanticType})</span>
+                                            <div key={s.name} className="border border-royal-green-600 rounded p-3 bg-royal-green-900/50 flex flex-col">
+                                                <label className="block text-sm font-medium text-slate-300 mb-2 truncate" title={s.name}>
+                                                    {s.name} <span className="text-xs text-slate-500 font-normal ml-1">({s.semanticType})</span>
                                                 </label>
                                                 {isDropdown ? (
-                                                    <select className="w-full text-sm border-gray-300 rounded focus:ring-primary-500 p-2 bg-white"
+                                                    <select className="w-full text-sm border-royal-green-600 rounded focus:ring-primary-500 p-2 bg-royal-green-900"
                                                         value={(sliceFilters.find(f => f.column === s.name)?.selected_values || [''])[0] || ''}
                                                         onChange={e => {
                                                             const val = e.target.value;
@@ -624,7 +628,7 @@ export default function DataExplorer({
                                                     <input
                                                         type={s.semanticType === 'numeric' ? 'number' : s.semanticType === 'datetime' ? 'date' : 'text'}
                                                         placeholder={`Filter ${s.name}...`}
-                                                        className="w-full text-sm border-gray-300 rounded focus:ring-primary-500 p-2 bg-white"
+                                                        className="w-full text-sm border-royal-green-600 rounded focus:ring-primary-500 p-2 bg-royal-green-900"
                                                         value={sliceFilters.find(f => f.column === s.name)?.text_pattern || ''}
                                                         onChange={e => {
                                                             const val = e.target.value;
@@ -649,7 +653,7 @@ export default function DataExplorer({
                 {activeTab === 'pivot' && (
                     <div className="space-y-6">
                         {discoveryLoading ? (
-                            <div className="flex items-center justify-center py-12 text-gray-500">
+                            <div className="flex items-center justify-center py-12 text-slate-400">
                                 <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Discovering pivots...
                             </div>
                         ) : pm ? (
@@ -657,57 +661,57 @@ export default function DataExplorer({
                                 {/* Suggestions */}
                                 {pm.suggestions.length > 0 && (
                                     <div className="space-y-2">
-                                        <h4 className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                                        <h4 className="text-sm font-medium text-slate-300 flex items-center gap-1">
                                             <Sparkles className="w-3.5 h-3.5 text-amber-500" /> Agent Suggestions
                                         </h4>
                                         <div className="flex gap-3 overflow-x-auto pb-2">
                                             {pm.suggestions.slice(0, 5).map((s: any, i: number) => (
                                                 <button
                                                     key={i}
-                                                    className="flex-shrink-0 border border-gray-200 rounded-lg p-3 bg-white hover:border-primary-300 hover:shadow-sm transition-all text-left min-w-[200px]"
+                                                    className="flex-shrink-0 border border-royal-green-600 rounded-lg p-3 bg-royal-green-900 hover:border-primary-300 hover:shadow-none transition-all text-left min-w-[200px]"
                                                     onClick={() => {
                                                         setPivotDimension(s.dimensions?.[0] || '');
                                                         setPivotMeasure(s.measures?.[0]?.column || '');
                                                         setPivotAgg(s.measures?.[0]?.aggregation || 'count');
                                                     }}
                                                 >
-                                                    <div className="text-sm font-medium text-gray-900 truncate">{s.name}</div>
-                                                    <div className="text-xs text-gray-400 mt-1 truncate">{s.reasoning}</div>
+                                                    <div className="text-sm font-medium text-slate-100 truncate">{s.name}</div>
+                                                    <div className="text-xs text-slate-500 mt-1 truncate">{s.reasoning}</div>
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
                                 )}
 
-                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 flex flex-col gap-4">
-                                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                                <div className="bg-royal-green-900 border border-royal-green-700 rounded-xl p-5 shadow-inner flex flex-col gap-6">
+                                    <div className="flex flex-col md:flex-row gap-6 items-end">
                                         <div className="flex-1">
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Row Dimension *</label>
-                                            <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotDimension} onChange={e => setPivotDimension(e.target.value)}>
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Primary Dimension Vector</label>
+                                            <select className="w-full text-sm font-bold border-royal-green-600 rounded-lg py-3 px-4 bg-royal-green-800 text-slate-100 focus:ring-primary focus:border-primary uppercase tracking-tight" value={pivotDimension} onChange={e => setPivotDimension(e.target.value)}>
                                                 <option value="">Select Dimension...</option>
                                                 {Object.entries(pm.dimensions).map(([col, dim]) => (
-                                                    <option key={col} value={col}>{dim.name}</option>
+                                                    <option key={col} value={col}>{dim.name.toUpperCase()}</option>
                                                 ))}
                                             </select>
                                         </div>
                                         <div className="flex-1">
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Column Dimension <span className="text-gray-400 font-normal">(optional, cross-tab)</span></label>
-                                            <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotDimension2} onChange={e => setPivotDimension2(e.target.value)}>
-                                                <option value="">None</option>
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Cross-Tab Vector <span className="text-slate-600 font-bold italic">(OPTIONAL)</span></label>
+                                            <select className="w-full text-sm font-bold border-royal-green-600 rounded-lg py-3 px-4 bg-royal-green-800 text-slate-100 focus:ring-primary focus:border-primary uppercase tracking-tight" value={pivotDimension2} onChange={e => setPivotDimension2(e.target.value)}>
+                                                <option value="">NONE</option>
                                                 {Object.entries(pm.dimensions)
                                                     .filter(([col]) => col !== pivotDimension)
                                                     .map(([col, dim]) => (
-                                                        <option key={col} value={col}>{dim.name}</option>
+                                                        <option key={col} value={col}>{dim.name.toUpperCase()}</option>
                                                     ))}
                                             </select>
                                         </div>
                                     </div>
-                                    <div className="flex flex-col md:flex-row gap-4 items-end">
-                                        <div className="w-48">
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Aggregation</label>
-                                            <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotAgg} onChange={e => setPivotAgg(e.target.value)}>
+                                    <div className="flex flex-col md:flex-row gap-6 items-end pt-4 border-t border-royal-green-800">
+                                        <div className="w-56">
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Aggregation Engine</label>
+                                            <select className="w-full text-sm font-black border-royal-green-600 rounded-lg py-3 px-4 bg-royal-green-800 text-primary focus:ring-primary focus:border-primary uppercase font-mono" value={pivotAgg} onChange={e => setPivotAgg(e.target.value)}>
                                                 <option value="count">COUNT</option>
-                                                <option value="count_distinct">COUNT DISTINCT</option>
+                                                <option value="count_distinct">COUNT_DISTINCT</option>
                                                 <option value="sum">SUM</option>
                                                 <option value="average">AVG</option>
                                                 <option value="min">MIN</option>
@@ -716,21 +720,21 @@ export default function DataExplorer({
                                             </select>
                                         </div>
                                         <div className="flex-1">
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">Measure (Value)</label>
-                                            <select className="w-full text-sm border-gray-300 rounded p-2" value={pivotMeasure} onChange={e => setPivotMeasure(e.target.value)} disabled={pivotAgg === 'count'}>
+                                            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">Measure Target</label>
+                                            <select className="w-full text-sm font-bold border-royal-green-600 rounded-lg py-3 px-4 bg-royal-green-800 text-slate-100 focus:ring-primary focus:border-primary uppercase tracking-tight" value={pivotMeasure} onChange={e => setPivotMeasure(e.target.value)} disabled={pivotAgg === 'count'}>
                                                 <option value="">Select Measure...</option>
                                                 {Object.entries(pm.measures).map(([col, meas]) => (
-                                                    <option key={col} value={col}>{meas.name}</option>
+                                                    <option key={col} value={col}>{meas.name.toUpperCase()}</option>
                                                 ))}
                                             </select>
                                         </div>
                                         <button
                                             onClick={handleGeneratePivot}
                                             disabled={!pivotDimension || (pivotAgg !== 'count' && !pivotMeasure) || pivotLoading}
-                                            className="btn-primary py-2 px-6 disabled:opacity-50 flex items-center gap-2"
+                                            className="btn-primary py-3 px-8 disabled:opacity-50 flex items-center gap-3 font-black uppercase tracking-tighter text-lg shadow-[0_0_20px_rgba(34,197,94,0.2)]"
                                         >
-                                            {pivotLoading && <Loader2 className="w-4 h-4 animate-spin" />}
-                                            Generate
+                                            {pivotLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                                            Execute
                                         </button>
                                     </div>
                                 </div>
@@ -739,14 +743,14 @@ export default function DataExplorer({
                                     <div className="space-y-4">
                                         {/* Pivot Chart (matplotlib) */}
                                         {pivotChart && (
-                                            <div className="border border-gray-200 rounded-lg overflow-hidden bg-gray-900 p-4 flex justify-center">
+                                            <div className="border border-royal-green-600 rounded-lg overflow-hidden bg-royal-green-900 p-4 flex justify-center">
                                                 <img src={pivotChart} alt="Pivot visualization" className="max-w-full h-auto rounded" />
                                             </div>
                                         )}
                                         {/* Pivot Table */}
-                                        <div className="border border-gray-200 rounded-lg overflow-hidden">
-                                            <div className="bg-white p-3 border-b border-gray-200 flex items-center justify-between">
-                                                <h4 className="font-medium text-sm text-gray-700">Server-Side Pivot Results ({pivotResult.length} groups)</h4>
+                                        <div className="border border-royal-green-600 rounded-lg overflow-hidden">
+                                            <div className="bg-royal-green-900 p-3 border-b border-royal-green-600 flex items-center justify-between">
+                                                <h4 className="font-medium text-sm text-slate-300">Server-Side Pivot Results ({pivotResult.length} groups)</h4>
                                                 <div className="flex items-center gap-2">
                                                     <button
                                                         onClick={() => {
@@ -766,7 +770,7 @@ export default function DataExplorer({
                                                             a.download = `pivot_${resource?.name || 'data'}_${new Date().toISOString().slice(0, 10)}.csv`;
                                                             a.click();
                                                         }}
-                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-royal-green-900 border border-royal-green-600 rounded-md hover:bg-royal-green-900/50 transition-colors"
                                                         title="Export as CSV"
                                                     >
                                                         <Download className="w-3.5 h-3.5" /> CSV
@@ -793,7 +797,7 @@ export default function DataExplorer({
                                                             a.download = `pivot_${resource?.name || 'data'}_${new Date().toISOString().slice(0, 10)}.json`;
                                                             a.click();
                                                         }}
-                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-royal-green-900 border border-royal-green-600 rounded-md hover:bg-royal-green-900/50 transition-colors"
                                                         title="Export as JSON"
                                                     >
                                                         <Download className="w-3.5 h-3.5" /> JSON
@@ -801,19 +805,19 @@ export default function DataExplorer({
                                                 </div>
                                             </div>
                                             <div className="overflow-x-auto max-h-[400px]">
-                                                <table className="min-w-full divide-y divide-gray-200">
-                                                    <thead className="bg-gray-50 sticky top-0">
+                                                <table className="min-w-full divide-y divide-royal-green-600">
+                                                    <thead className="bg-royal-green-900/50 sticky top-0">
                                                         <tr>
                                                             {pivotResult.length > 0 && Object.keys(pivotResult[0]).map(k => (
-                                                                <th key={k} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{k}</th>
+                                                                <th key={k} className="px-4 py-3 text-left text-xs font-medium text-slate-400 uppercase">{k}</th>
                                                             ))}
                                                         </tr>
                                                     </thead>
-                                                    <tbody className="bg-white divide-y divide-gray-200">
+                                                    <tbody className="bg-royal-green-900 divide-y divide-royal-green-600">
                                                         {pivotResult.map((row, idx) => (
-                                                            <tr key={idx} className="hover:bg-gray-50">
+                                                            <tr key={idx} className="hover:bg-royal-green-900/50">
                                                                 {Object.values(row).map((v, ci) => (
-                                                                    <td key={ci} className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                                                                    <td key={ci} className="px-4 py-2 whitespace-nowrap text-sm text-slate-100">
                                                                         {typeof v === 'number' ? (v % 1 !== 0 ? (v as number).toFixed(2) : v) : String(v ?? 'null')}
                                                                     </td>
                                                                 ))}
@@ -826,15 +830,15 @@ export default function DataExplorer({
                                     </div>
                                 )}
                                 {!pivotResult && (
-                                    <div className="text-center py-12 border border-gray-200 rounded-lg bg-gray-50 border-dashed">
-                                        <p className="text-gray-500">Select dimensions and measures or click a suggestion above to generate a pivot table.</p>
+                                    <div className="text-center py-12 border border-royal-green-600 rounded-lg bg-royal-green-900/50 border-dashed">
+                                        <p className="text-slate-400">Select dimensions and measures or click a suggestion above to generate a pivot table.</p>
                                     </div>
                                 )}
                             </>
                         ) : (
                             /* Fallback: old-style pivot */
-                            <div className="text-center py-12 border border-gray-200 rounded bg-gray-50 border-dashed">
-                                <p className="text-gray-500">Pivot discovery not available. Select a data source and resource first.</p>
+                            <div className="text-center py-12 border border-royal-green-600 rounded bg-royal-green-900/50 border-dashed">
+                                <p className="text-slate-400">Pivot discovery not available. Select a data source and resource first.</p>
                             </div>
                         )}
                     </div>

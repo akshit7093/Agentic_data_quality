@@ -5,9 +5,10 @@ import {
   ListChecks,
   TrendingUp,
   Activity,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
+  FileText,
+  Server,
+  Cpu,
+  HardDrive
 } from 'lucide-react';
 import { useSystemHealth, useLLMHealth } from '@/hooks/useSystem';
 import { useDataSources } from '@/hooks/useDataSources';
@@ -68,289 +69,199 @@ export default function Dashboard() {
   const { data: llmHealth } = useLLMHealth();
   const { data: dataSources } = useDataSources();
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <CheckCircle className="w-5 h-5 text-success-500" />;
-      case 'failed':
-        return <XCircle className="w-5 h-5 text-danger-500" />;
-      case 'running':
-        return <Activity className="w-5 h-5 text-primary-500 animate-pulse" />;
-      default:
-        return <AlertCircle className="w-5 h-5 text-gray-400" />;
-    }
-  };
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
-        return <span className="badge-success">Completed</span>;
+        return <span className="px-2 py-1 rounded text-[10px] font-black bg-primary/20 text-primary border border-primary/30 uppercase tracking-widest">Success</span>;
       case 'failed':
-        return <span className="badge-danger">Failed</span>;
+        return <span className="px-2 py-1 rounded text-[10px] font-black bg-red-500/20 text-red-500 border border-red-500/30 uppercase tracking-widest">Failed</span>;
       case 'running':
-        return <span className="badge-info">Running</span>;
+        return <span className="px-2 py-1 rounded text-[10px] font-black bg-slate-700/50 text-slate-300 border border-slate-600 uppercase tracking-widest">Running</span>;
       default:
-        return <span className="badge">{status}</span>;
+        return <span className="px-2 py-1 rounded text-[10px] font-black bg-slate-700/50 text-slate-300 border border-slate-600 uppercase tracking-widest">{status}</span>;
     }
   };
 
-  const getScoreColor = (score: number) => {
-    if (score >= 90) return 'text-success-600';
-    if (score >= 70) return 'text-warning-600';
-    return 'text-danger-600';
+  const getScoreColorBg = (score: number | null) => {
+    if (score === null) return 'bg-primary/20 animate-pulse';
+    if (score >= 90) return 'bg-primary';
+    if (score >= 70) return 'bg-primary/70';
+    return 'bg-red-500';
   };
 
   return (
-    <div className="space-y-6">
-      {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Overview of your data quality metrics and recent activity
-        </p>
+    <div className="space-y-8">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-2">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-slate-100 text-3xl md:text-4xl font-black leading-tight tracking-tighter">Dashboard</h1>
+          <p className="text-slate-400 text-sm md:text-base max-w-2xl">Overview of your data quality metrics and recent activity.</p>
+        </div>
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="card">
-          <div className="card-body">
-            <div className="flex items-center">
-              <div className="p-3 bg-primary-100 rounded-lg">
-                <ClipboardCheck className="w-6 h-6 text-primary-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Total Validations</p>
-                <p className="text-2xl font-bold text-gray-900">{mockStats.totalValidations}</p>
-              </div>
-            </div>
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="bg-surface-dark border border-primary/20 p-6 rounded-xl relative overflow-hidden group hover:border-primary transition-all shadow-sm">
+          <div className="absolute -right-2 -top-2 opacity-5 group-hover:opacity-10 transition-opacity">
+            <ClipboardCheck className="w-24 h-24 text-primary" strokeWidth={1.5} />
+          </div>
+          <p className="text-slate-200 text-[10px] font-black tracking-widest uppercase relative z-10">TOTAL VALIDATIONS</p>
+          <div className="flex items-end gap-3 mt-2 relative z-10">
+            <h3 className="text-3xl font-black text-slate-100">{mockStats.totalValidations}</h3>
+            <span className="text-primary text-[10px] font-black mb-1 flex items-center bg-primary/10 px-2 py-0.5 rounded uppercase tracking-widest">
+              <TrendingUp className="w-3 h-3 mr-1" /> 12%
+            </span>
           </div>
         </div>
 
-        <div className="card">
-          <div className="card-body">
-            <div className="flex items-center">
-              <div className="p-3 bg-success-100 rounded-lg">
-                <Database className="w-6 h-6 text-success-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Data Sources</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {dataSources?.length || mockStats.totalDataSources}
-                </p>
-              </div>
-            </div>
+        <div className="bg-surface-dark border border-primary/20 p-6 rounded-xl relative overflow-hidden group hover:border-primary transition-all shadow-sm">
+          <div className="absolute -right-2 -top-2 opacity-5 group-hover:opacity-10 transition-opacity">
+            <Database className="w-24 h-24 text-primary" strokeWidth={1.5} />
+          </div>
+          <p className="text-slate-200 text-[10px] font-black tracking-widest uppercase relative z-10">TOTAL DATA SOURCES</p>
+          <div className="flex items-end gap-3 mt-2 relative z-10">
+            <h3 className="text-3xl font-black text-slate-100">
+              {dataSources?.length || mockStats.totalDataSources}
+            </h3>
+            <span className="text-slate-400 text-[10px] font-black mb-1 bg-slate-800 px-2 py-0.5 rounded uppercase tracking-widest">0%</span>
           </div>
         </div>
 
-        <div className="card">
-          <div className="card-body">
-            <div className="flex items-center">
-              <div className="p-3 bg-warning-100 rounded-lg">
-                <ListChecks className="w-6 h-6 text-warning-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Validation Rules</p>
-                <p className="text-2xl font-bold text-gray-900">{mockStats.totalRules}</p>
-              </div>
-            </div>
+        <div className="bg-surface-dark border border-primary/20 p-6 rounded-xl relative overflow-hidden group hover:border-primary transition-all shadow-sm">
+          <div className="absolute -right-2 -top-2 opacity-5 group-hover:opacity-10 transition-opacity">
+            <ListChecks className="w-24 h-24 text-primary" strokeWidth={1.5} />
+          </div>
+          <p className="text-slate-200 text-[10px] font-black tracking-widest uppercase relative z-10">TOTAL RECORDS</p>
+          <div className="flex items-end gap-3 mt-2 relative z-10">
+            <h3 className="text-3xl font-black text-slate-100">{mockStats.totalRules}</h3>
+            <span className="text-primary text-[10px] font-black mb-1 flex items-center bg-primary/10 px-2 py-0.5 rounded uppercase tracking-widest">
+              <TrendingUp className="w-3 h-3 mr-1" /> 5%
+            </span>
           </div>
         </div>
 
-        <div className="card">
-          <div className="card-body">
-            <div className="flex items-center">
-              <div className="p-3 bg-primary-100 rounded-lg">
-                <TrendingUp className="w-6 h-6 text-primary-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">Avg Quality Score</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {mockStats.averageQualityScore}%
-                </p>
-              </div>
-            </div>
+        <div className="bg-surface-dark border border-primary/20 p-6 rounded-xl relative overflow-hidden group hover:border-primary transition-all shadow-sm">
+          <div className="absolute -right-2 -top-2 opacity-5 group-hover:opacity-10 transition-opacity">
+            <Activity className="w-24 h-24 text-primary" strokeWidth={1.5} />
+          </div>
+          <p className="text-slate-200 text-[10px] font-black tracking-widest uppercase relative z-10">HEALTH SCORE</p>
+          <div className="flex items-end gap-3 mt-2 relative z-10">
+            <h3 className="text-3xl font-black text-slate-100">{mockStats.averageQualityScore}%</h3>
+            <span className="text-primary text-[10px] font-black mb-1 flex items-center bg-primary/10 px-2 py-0.5 rounded uppercase tracking-widest">
+              <TrendingUp className="w-3 h-3 mr-1" /> 2.1%
+            </span>
           </div>
         </div>
       </div>
 
-      {/* System Status */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="text-lg font-semibold text-gray-900">System Status</h2>
-        </div>
-        <div className="card-body">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="flex items-center p-4 bg-gray-50 rounded-lg">
-              <div
-                className={`w-3 h-3 rounded-full mr-3 ${systemHealth?.status === 'healthy' ? 'bg-success-500' : 'bg-danger-500'
-                  }`}
-              />
-              <div>
-                <p className="text-sm font-medium text-gray-900">API Server</p>
-                <p className="text-xs text-gray-500">{systemHealth?.status || 'Unknown'}</p>
-              </div>
-            </div>
-
-            <div className="flex items-center p-4 bg-gray-50 rounded-lg">
-              <div
-                className={`w-3 h-3 rounded-full mr-3 ${llmHealth?.status === 'healthy' ? 'bg-success-500' : 'bg-danger-500'
-                  }`}
-              />
-              <div>
-                <p className="text-sm font-medium text-gray-900">LLM Service</p>
-                <p className="text-xs text-gray-500">
-                  {llmHealth?.provider || 'Unknown'} ({llmHealth?.model || 'N/A'})
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center p-4 bg-gray-50 rounded-lg">
-              <div className="w-3 h-3 rounded-full bg-success-500 mr-3" />
-              <div>
-                <p className="text-sm font-medium text-gray-900">Database</p>
-                <p className="text-xs text-gray-500">Connected</p>
-              </div>
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Recent Validations Table */}
+        <div className="lg:col-span-2 bg-surface-dark border border-primary/10 rounded-xl overflow-hidden flex flex-col shadow-sm">
+          <div className="px-6 py-5 border-b border-primary/10 flex items-center justify-between">
+            <h2 className="text-lg font-black text-slate-100 tracking-wide">RECENT VALIDATIONS</h2>
+            <Link to="/validations" className="text-primary text-xs font-bold uppercase tracking-widest hover:underline">
+              View All
+            </Link>
           </div>
-        </div>
-      </div>
-
-      {/* Recent Validations */}
-      <div className="card">
-        <div className="card-header flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Recent Validations</h2>
-          <Link to="/validations" className="text-sm text-primary-600 hover:text-primary-700">
-            View all
-          </Link>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Target
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Quality Score
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Rules
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Completed
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {mockRecentValidations.map((validation) => (
-                <tr key={validation.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <Link
-                      to={`/validations/${validation.id}`}
-                      className="text-sm font-medium text-primary-600 hover:text-primary-700"
-                    >
-                      {validation.target_path}
-                    </Link>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center space-x-2">
-                      {getStatusIcon(validation.status)}
-                      {getStatusBadge(validation.status)}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {validation.quality_score !== null ? (
-                      <span
-                        className={`text-sm font-semibold ${getScoreColor(
-                          validation.quality_score
-                        )}`}
-                      >
-                        {validation.quality_score}%
-                      </span>
-                    ) : (
-                      <span className="text-sm text-gray-400">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center space-x-2 text-sm">
-                      <span className="text-success-600">
-                        {validation.passed_rules} passed
-                      </span>
-                      <span className="text-gray-400">|</span>
-                      <span className="text-danger-600">
-                        {validation.failed_rules} failed
-                      </span>
-                      <span className="text-gray-400">/</span>
-                      <span className="text-gray-600">{validation.total_rules} total</span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {validation.completed_at
-                      ? new Date(validation.completed_at).toLocaleString()
-                      : '-'}
-                  </td>
+          <div className="flex-1 overflow-x-auto">
+            <table className="w-full text-left">
+              <thead className="bg-black/40 text-slate-200 text-[10px] uppercase font-black tracking-[0.2em] border-b border-primary/20">
+                <tr>
+                  <th className="px-6 py-4">Target Asset</th>
+                  <th className="px-6 py-4">Success Rate</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4">Last Checked</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-primary/10">
+                {mockRecentValidations.map((validation) => (
+                  <tr key={validation.id} className="hover:bg-primary/5 transition-colors group">
+                    <td className="px-6 py-4 flex items-center gap-3">
+                      <FileText className="w-5 h-5 text-slate-500 group-hover:text-primary transition-colors" />
+                      <Link
+                        to={`/validations/${validation.id}`}
+                        className="text-slate-200 font-bold hover:text-primary transition-colors"
+                      >
+                        {validation.target_path}
+                      </Link>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-24 h-1.5 bg-slate-800 rounded-full overflow-hidden relative">
+                          <div
+                            className={`h-full ${getScoreColorBg(validation.quality_score)}`}
+                            style={validation.quality_score ? { width: `${validation.quality_score}%` } : { width: '100%' }}
+                          />
+                        </div>
+                        <span className="text-xs font-bold text-slate-300">
+                          {validation.quality_score !== null ? `${validation.quality_score}%` : '---'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {getStatusBadge(validation.status)}
+                    </td>
+                    <td className="px-6 py-4 text-xs font-bold text-slate-400 tracking-wider">
+                      {validation.completed_at
+                        ? new Date(validation.completed_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                        : 'Active'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
 
-      {/* Quick Actions */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        <Link
-          to="/datasources"
-          className="card hover:shadow-md transition-shadow cursor-pointer"
-        >
-          <div className="card-body">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-primary-100 rounded-lg">
-                <Database className="w-6 h-6 text-primary-600" />
+        {/* System Status Sidebar */}
+        <div className="space-y-6">
+          <div className="bg-surface-dark border border-primary/10 p-6 rounded-xl shadow-sm">
+            <h2 className="text-lg font-black text-slate-100 mb-6 tracking-wide uppercase">System Status</h2>
+            <div className="space-y-4">
+              <div className="p-4 bg-black/40 border border-primary/5 rounded-lg flex items-center gap-4">
+                <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary royal-glow">
+                  <Server className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-slate-200 font-bold text-sm">API Server</h4>
+                    <span className={`size-2 rounded-full ${systemHealth?.status === 'healthy' ? 'bg-primary shadow-[0_0_8px_rgba(16,183,127,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`}></span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">
+                    {systemHealth?.status === 'healthy' ? 'Operational • 99.9% Uptime' : 'Issues Detected'}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-900">Connect Data Source</h3>
-                <p className="text-xs text-gray-500 mt-1">Add a new data source to validate</p>
+
+              <div className="p-4 bg-black/40 border border-primary/5 rounded-lg flex items-center gap-4">
+                <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary royal-glow">
+                  <Cpu className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-slate-200 font-bold text-sm">LLM Service</h4>
+                    <span className={`size-2 rounded-full ${llmHealth?.status === 'healthy' ? 'bg-primary shadow-[0_0_8px_rgba(16,183,127,0.6)]' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)]'}`}></span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mt-1">
+                    {llmHealth?.status === 'healthy' ? `Operational • ${llmHealth.provider}` : 'Degraded'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 bg-black/40 border border-primary/5 rounded-lg flex items-center gap-4">
+                <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary royal-glow">
+                  <HardDrive className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-slate-200 font-bold text-sm">Database</h4>
+                    <span className="size-2 bg-primary rounded-full shadow-[0_0_8px_rgba(16,183,127,0.6)]"></span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-1">Operational • Low latency</p>
+                </div>
               </div>
             </div>
           </div>
-        </Link>
-
-        <Link
-          to="/validations"
-          className="card hover:shadow-md transition-shadow cursor-pointer"
-        >
-          <div className="card-body">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-success-100 rounded-lg">
-                <ClipboardCheck className="w-6 h-6 text-success-600" />
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-900">Run Validation</h3>
-                <p className="text-xs text-gray-500 mt-1">Start a new data quality validation</p>
-              </div>
-            </div>
-          </div>
-        </Link>
-
-        <Link
-          to="/rules"
-          className="card hover:shadow-md transition-shadow cursor-pointer"
-        >
-          <div className="card-body">
-            <div className="flex items-center space-x-3">
-              <div className="p-3 bg-warning-100 rounded-lg">
-                <ListChecks className="w-6 h-6 text-warning-600" />
-              </div>
-              <div>
-                <h3 className="text-sm font-medium text-gray-900">Manage Rules</h3>
-                <p className="text-xs text-gray-500 mt-1">Create and edit validation rules</p>
-              </div>
-            </div>
-          </div>
-        </Link>
+        </div>
       </div>
     </div>
   );

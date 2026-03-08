@@ -3,7 +3,9 @@ Fixed: Export endpoints, Fix recommendation endpoints, Full-scan support, String
 """
 import uuid
 import os
+import json
 import logging
+from dataclasses import asdict
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
@@ -41,6 +43,31 @@ EXPORT_DIR = Path(__file__).parent.parent.parent.parent / "exports"
 # Ensure directories exist
 os.makedirs(str(EXPORT_DIR), exist_ok=True)
 os.makedirs(str(UPLOAD_DIR), exist_ok=True)
+
+VALIDATION_STORE_PATH = TEST_DATA_DIR / "validation_store.json"
+
+def _load_store():
+    global _validation_store
+    if VALIDATION_STORE_PATH.exists():
+        try:
+            with open(VALIDATION_STORE_PATH, "r") as f:
+                _validation_store = json.load(f)
+            logger.info(f"Loaded {len(_validation_store)} validations from persistence")
+        except Exception as e:
+            logger.error(f"Error loading validation store: {e}")
+
+def _save_store():
+    try:
+        # Use a temporary file to avoid corruption
+        temp_path = VALIDATION_STORE_PATH.with_suffix(".tmp")
+        with open(temp_path, "w") as f:
+            # Use jsonable_encoder to handle dataclasses/pydantic models in the store
+            json.dump(jsonable_encoder(_validation_store), f, indent=2)
+        os.replace(temp_path, VALIDATION_STORE_PATH)
+    except Exception as e:
+        logger.error(f"Error saving validation store: {e}")
+
+_load_store()
 
 # ============================================================================
 # Built-in data sources — always available
@@ -438,6 +465,7 @@ async def submit_validation(
     }
 
     background_tasks.add_task(run_validation, validation_id, request)
+    _save_store()
 
     return ValidationResponse(
         validation_id=validation_id,
@@ -508,15 +536,19 @@ async def run_validation(validation_id: str, request: ValidationRequest):
             "full_scan_used": request.full_scan,
         })
 
+        _save_store()
         logger.info(f"Validation {validation_id} completed with score: {result.get('quality_score')}")
 
     except Exception as e:
+        import traceback
         logger.error(f"Validation {validation_id} failed: {str(e)}")
+        logger.error(f"Full traceback:\n{traceback.format_exc()}")
         _validation_store[validation_id].update({
             "status": "failed",
             "error_message": str(e),
             "completed_at": datetime.utcnow().isoformat(),
         })
+        _save_store()
 
 
 @router.get("/validate/{validation_id}", response_model=ValidationStatusResponse)
@@ -555,7 +587,7 @@ async def get_validation_results(validation_id: str):
     """Get detailed validation results."""
     if validation_id not in _validation_store:
         raise HTTPException(status_code=404, detail="Validation not found")
-    result = _validation_store[validation_id].get("result", {})
+    result = _validation_store[validation_id].get("result") or {}
     validation_results = result.get("validation_results", []) if result else []
     fix_recommendations = result.get("fix_recommendations", []) if result else []
 
@@ -563,6 +595,7 @@ async def get_validation_results(validation_id: str):
     for r in validation_results:
         serialized.append({
             "rule_name": getattr(r, "rule_name", "unknown"),
+            "column_name": getattr(r, "column_name", None),
             "status": getattr(r, "status", "unknown"),
             "severity": getattr(r, "severity", "info"),
             "rule_type": getattr(r, "rule_type", ""),
@@ -572,6 +605,9 @@ async def get_validation_results(validation_id: str):
             "failure_examples": getattr(r, "failure_examples", [])[:5],
             "executed_query": getattr(r, "executed_query", None),
             "data_source": getattr(r, "data_source", "full_dataset"),
+            "check_origin": getattr(r, "check_origin", "pre_built"),
+            "agent_reasoning": getattr(r, "agent_reasoning", None),
+            "agent_comprehension": getattr(r, "agent_comprehension", None),
         })
 
     fixes = []
@@ -617,6 +653,99 @@ async def get_validation_report(
     else:
         raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
 
+
+# ============================================================================
+# Ticketing Routes
+# ============================================================================
+class TicketRequest(BaseModel):
+    rule_names: Optional[List[str]] = None
+    rule_id: Optional[str] = None
+
+class NotifyRequest(BaseModel):
+    ticket_markdown: str
+    assigned_to: str
+    rule_names: List[str]
+
+@router.post("/validate/{validation_id}/ticket")
+async def create_ticket(validation_id: str, request: TicketRequest):
+    """Generate a ticket for one or more failing rules."""
+    if validation_id not in _validation_store:
+        raise HTTPException(status_code=404, detail="Validation not found")
+    
+    v = _validation_store[validation_id]
+    state = v.get("result") or {}
+    
+    if not state.get("validation_results"):
+        raise HTTPException(status_code=400, detail="No validation results found")
+        
+    ticketing_agent = TicketingAgent()
+    
+    # Handle both rule_names (list) and rule_id (string) from frontend
+    rule_names = request.rule_names or ([request.rule_id] if request.rule_id else [])
+    primary_rule = rule_names[0] if rule_names else "Multiple Rules"
+    
+    # Try to find rule details in the state
+    # Note: _validation_store[validation_id]['result'] might contain 'results' or 'validation_results'
+    results = state.get("results") or state.get("validation_results") or []
+    rule_details = {}
+    failure_examples = []
+    
+    for r in results:
+        r_name = r.get("rule_name") if isinstance(r, dict) else getattr(r, "rule_name", None)
+        if r_name == primary_rule:
+            rule_details = r if isinstance(r, dict) else asdict(r)
+            failure_examples = rule_details.get("failure_examples", [])[:5]
+            break
+
+    try:
+        # Pass necessary context to generate_ticket
+        ticket_markdown = await ticketing_agent.generate_ticket(
+            rule_name=primary_rule,
+            rule_details=rule_details,
+            schema=state.get("schema", {}),
+            failure_examples=failure_examples
+        )
+        return {"ticket_markdown": ticket_markdown}
+    except Exception as e:
+        logger.error(f"Ticketing error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/users")
+async def get_users():
+    """Get a mock list of users for ticket assignment."""
+    return [
+        {"id": "u1", "username": "@data_engineer_1", "role": "Data Engineer"},
+        {"id": "u2", "username": "@steward_sarah", "role": "Data Steward"},
+        {"id": "u3", "username": "@admin_alex", "role": "Admin"},
+        {"id": "u4", "username": "@analyst_jane", "role": "Data Analyst"},
+    ]
+
+@router.post("/validate/{validation_id}/notify")
+async def send_notification(validation_id: str, request: NotifyRequest):
+    """Dispatch the ticket notification to the assigned user."""
+    if validation_id not in _validation_store:
+        raise HTTPException(status_code=404, detail="Validation not found")
+        
+    try:
+        # In a real app we would send an email or Slack message here.
+        # We'll just mock it and save it to the validation state (in-memory).
+        v = _validation_store[validation_id]
+        if "tickets" not in v:
+            v["tickets"] = []
+            
+        ticket_record = {
+            "id": str(uuid.uuid4())[:8],
+            "assigned_to": request.assigned_to,
+            "rule_names": request.rule_names,
+            "created_at": datetime.utcnow().isoformat(),
+            "status": "OPEN"
+        }
+        v["tickets"].append(ticket_record)
+        
+        return {"status": "success", "message": f"Ticket assigned to {request.assigned_to}", "ticket": ticket_record}
+    except Exception as e:
+        logger.error(f"Notification dispatch failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
 # Export Routes (NEW - v8)
@@ -873,50 +1002,7 @@ class ApplyFixesRequest(BaseModel):
     fix_instructions: List[FixInstruction]
     use_agent: bool = True
 
-class TicketRequest(BaseModel):
-    rule_name: str
 
-@router.post("/validate/{validation_id}/ticket")
-async def generate_ticket(validation_id: str, request: TicketRequest):
-    """Generate a markdown ticket for manual data errors via the TicketingAgent."""
-    if validation_id not in _validation_store:
-        raise HTTPException(status_code=404, detail="Validation not found")
-        
-    v = _validation_store[validation_id]
-    result = v.get("result", {})
-    results = result.get("results", [])
-    
-    # Find the rule details
-    rule_details = None
-    failure_examples = []
-    
-    for r in results:
-        # Check both dict access and object attribute access in case of Pydantic model
-        r_name = r.get("rule_name") if isinstance(r, dict) else getattr(r, "rule_name", None)
-        
-        if r_name == request.rule_name:
-            # Convert to dict for TicketAgent if it's an object
-            rule_details = r if isinstance(r, dict) else r.model_dump()
-            failure_examples = rule_details.get("failure_examples", [])
-            break
-            
-    if not rule_details:
-        raise HTTPException(status_code=404, detail=f"Rule {request.rule_name} not found in validation results")
-        
-    schema = v.get("schema", {})
-    
-    try:
-        agent = TicketingAgent()
-        ticket_md = await agent.generate_ticket(
-            rule_name=request.rule_name,
-            rule_details=rule_details,
-            schema=schema,
-            failure_examples=failure_examples
-        )
-        return {"status": "success", "ticket_markdown": ticket_md}
-    except Exception as e:
-        logger.error(f"Error generating ticket: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate ticket: {str(e)}")
 
 
 
@@ -1091,6 +1177,59 @@ async def analyze_data_quality(
 ):
     """Get AI analysis of data quality issues."""
     return {"analysis": "", "recommendations": []}
+
+
+# ============================================================================
+# Chatbot Agent Routes (NEW - v10)
+# ============================================================================
+
+class ChatRequest(BaseModel):
+    message: str
+    validation_id: str
+    history: Optional[List[Dict[str, Any]]] = None
+
+
+@router.post("/chat")
+async def chat_with_agent(request: ChatRequest):
+    """Interact with the Hybrid Chatbot Agent."""
+    if request.validation_id not in _validation_store:
+        raise HTTPException(status_code=404, detail="Validation session not found")
+
+    v = _validation_store[request.validation_id]
+    source_id = v.get("data_source_id")
+    target_path = v.get("target_path")
+    
+    if not source_id or not target_path:
+        raise HTTPException(status_code=400, detail="Validation session missing source information")
+        
+    source = _get_source(source_id)
+    source_info = DataSourceInfo(
+        source_type=source["source_type"],
+        connection_config=source["connection_config"],
+        target_path=target_path,
+        schema=v.get("result", {}).get("schema")
+    )
+
+    from app.agents.chatbot_agent import ChatbotAgent
+    agent = ChatbotAgent()
+    
+    # Get history from store if not provided
+    chat_history = request.history or v.get("chat_history", [])
+    
+    try:
+        result = await agent.run(source_info, request.message, history=chat_history)
+        
+        # Update store with new history
+        v["chat_history"] = result["history"]
+        
+        return {
+            "response": result["response"],
+            "history": result["history"],
+            "status": result["status"]
+        }
+    except Exception as e:
+        logger.exception("Chatbot interaction failed")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
@@ -1357,5 +1496,94 @@ async def health_check():
 
 @router.get("/supported-sources")
 async def get_supported_source_types():
-    """Get list of supported data source types."""
     return {"source_types": ConnectorFactory.get_supported_types()}
+
+# ============================================================================
+# LLM Settings
+# ============================================================================
+from pydantic import BaseModel
+import os
+
+class LLMSettingsUpdate(BaseModel):
+    provider: str
+    ollama_base_url: str = ""
+    ollama_model: str = ""
+    lmstudio_base_url: str = ""
+    openai_api_key: str = ""
+    openai_model: str = ""
+    anthropic_api_key: str = ""
+    anthropic_model: str = ""
+    gemini_api_key: str = ""
+    gemini_model: str = ""
+    groq_api_keys: str = ""
+    groq_model: str = ""
+    openrouter_api_keys: str = ""
+    openrouter_model: str = ""
+
+@router.get("/settings")
+async def get_settings_route():
+    """Get current settings from .env file."""
+    try:
+        from dotenv import dotenv_values
+        env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
+        env_vars = dotenv_values(env_path) if os.path.exists(env_path) else {}
+        
+        return {
+            "provider": env_vars.get("LLM_PROVIDER", "ollama"),
+            "ollama_base_url": env_vars.get("OLLAMA_BASE_URL", "http://localhost:11434"),
+            "ollama_model": env_vars.get("LLM_MODEL", "llama3.2"),
+            "lmstudio_base_url": env_vars.get("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
+            "openai_api_key": env_vars.get("OPENAI_API_KEY", ""),
+            "openai_model": env_vars.get("OPENAI_MODEL", "gpt-4"),
+            "anthropic_api_key": env_vars.get("ANTHROPIC_API_KEY", ""),
+            "anthropic_model": env_vars.get("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022"),
+            "gemini_api_key": env_vars.get("GEMINI_API_KEY", ""),
+            "gemini_model": env_vars.get("GEMINI_MODEL", "gemini-2.5-pro"),
+            "groq_api_keys": env_vars.get("GROQ_API_KEYS", ""),
+            "groq_model": env_vars.get("GROQ_MODEL", "llama-3.2-90b-vision-preview"),
+            "openrouter_api_keys": env_vars.get("OPENROUTER_API_KEYS", ""),
+            "openrouter_model": env_vars.get("OPENROUTER_MODEL", "deepseek/deepseek-r1"),
+        }
+    except Exception as e:
+        logger.error(f"Failed to fetch settings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/settings")
+async def update_settings(payload: LLMSettingsUpdate):
+    """Update settings in the .env file."""
+    try:
+        from dotenv import set_key
+        env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
+        
+        # Ensure .env exists
+        if not os.path.exists(env_path):
+            with open(env_path, "w") as f:
+                f.write("")
+
+        set_key(env_path, "LLM_PROVIDER", payload.provider)
+        
+        if payload.provider == "ollama":
+            if payload.ollama_base_url: set_key(env_path, "OLLAMA_BASE_URL", payload.ollama_base_url)
+            if payload.ollama_model: set_key(env_path, "LLM_MODEL", payload.ollama_model)
+        elif payload.provider == "openai":
+            if payload.openai_api_key: set_key(env_path, "OPENAI_API_KEY", payload.openai_api_key)
+            if payload.openai_model: set_key(env_path, "OPENAI_MODEL", payload.openai_model)
+        elif payload.provider == "anthropic":
+            if payload.anthropic_api_key: set_key(env_path, "ANTHROPIC_API_KEY", payload.anthropic_api_key)
+            if payload.anthropic_model: set_key(env_path, "ANTHROPIC_MODEL", payload.anthropic_model)
+        elif payload.provider == "gemini":
+            if payload.gemini_api_key: set_key(env_path, "GEMINI_API_KEY", payload.gemini_api_key)
+            if payload.gemini_model: set_key(env_path, "GEMINI_MODEL", payload.gemini_model)
+        elif payload.provider == "groq":
+            if payload.groq_api_keys: set_key(env_path, "GROQ_API_KEYS", payload.groq_api_keys)
+            if payload.groq_model: set_key(env_path, "GROQ_MODEL", payload.groq_model)
+        elif payload.provider == "openrouter":
+            if payload.openrouter_api_keys: set_key(env_path, "OPENROUTER_API_KEYS", payload.openrouter_api_keys)
+            if payload.openrouter_model: set_key(env_path, "OPENROUTER_MODEL", payload.openrouter_model)
+            
+        settings.LLM_PROVIDER = payload.provider
+
+        return {"status": "success", "message": "Settings saved successfully."}
+    except Exception as e:
+        logger.error(f"Failed to update settings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

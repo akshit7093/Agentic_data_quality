@@ -6,12 +6,16 @@ Supports expanded context windows and enhanced logging for agentic tracing.
 import json
 import logging
 import re
+import asyncio
 from typing import List, Dict, Any, Optional, AsyncGenerator
+from aiolimiter import AsyncLimiter
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from tenacity import retry, stop_after_attempt, wait_exponential
 from app.core.config import get_settings
 
@@ -23,62 +27,128 @@ class LLMService:
     
     def __init__(self):
         self.settings = get_settings()
-        self._llm: Optional[BaseChatModel] = None
+        self._models: List[BaseChatModel] = []
+        self._model_index = 0
+        self._lock = asyncio.Lock()
+        
+        # Rate Limiting for Gemini
+        self._gemini_limiter: Optional[AsyncLimiter] = None
+        self._gemini_tpm_limiter: Optional[AsyncLimiter] = None
+        self._gemini_rpd_limiter: Optional[AsyncLimiter] = None
+        if self.settings.LLM_PROVIDER.strip().lower() == "gemini":
+            # Convert configs to AIOLimiter
+            rpm = max(1, self.settings.GEMINI_RPM_LIMIT)
+            tpm = getattr(self.settings, 'GEMINI_TPM_LIMIT', 250000)
+            rpd = getattr(self.settings, 'GEMINI_RPD_LIMIT', 2000)
+            
+            # Smooth requests evenly to avoid AI Studio free tier burst rejection
+            self._gemini_limiter = AsyncLimiter(max_rate=1, time_period=60.0 / rpm)
+            self._gemini_tpm_limiter = AsyncLimiter(max_rate=tpm, time_period=60)
+            self._gemini_rpd_limiter = AsyncLimiter(max_rate=rpd, time_period=86400)
 
-    @property
-    def llm(self) -> BaseChatModel:
-        """Get or create LLM instance."""
-        if self._llm is None:
-            self._llm = self._create_llm()
-        return self._llm
+    async def get_model(self) -> BaseChatModel:
+        """Get or create LLM instance context-safely with round-robin rotation."""
+        async with self._lock:
+            if not self._models:
+                self._models = self._create_models()
+                if not self._models:
+                    raise ValueError("Failed to initialize any LLM models.")
+            
+            # Round-robin selection
+            model = self._models[self._model_index]
+            self._model_index = (self._model_index + 1) % len(self._models)
+            return model
 
-    def _create_llm(self) -> BaseChatModel:
-        """Create LLM instance based on configuration."""
+    def _create_models(self) -> List[BaseChatModel]:
+        """Create a list of LLM instances. Multiple instances = API key rotation."""
         provider = self.settings.LLM_PROVIDER.strip().lower()
+        
+        # Helper to parse comma-separated keys
+        def parse_keys(keys_str: Optional[str]) -> List[str]:
+            if not keys_str:
+                return []
+            return [k.strip() for k in keys_str.split(',') if k.strip()]
         
         # INCREASED context sizes for ReAct loops which consume many tokens
         if provider == "ollama":
             logger.info(f"Initializing Ollama LLM with model: {self.settings.OLLAMA_MODEL}")
-            return ChatOllama(
+            return [ChatOllama(
                 model=self.settings.OLLAMA_MODEL.strip(),
                 base_url=self.settings.OLLAMA_BASE_URL.strip(),
                 temperature=0.1,
                 num_ctx=16384,  # Expanded for agentic memory
-            )
+            )]
         
-        elif provider == "lmstudio":
+        elif provider in ("lmstudio", "lm-studio", "lm_studio"):
             logger.info(f"Initializing LM Studio LLM at: {self.settings.LMSTUDIO_BASE_URL}")
             # Import the centralized config so max_tokens is tunable in one place
             from app.agents.data_quality_agent import LLM_MAX_TOKENS
-            return ChatOpenAI(
+            return [ChatOpenAI(
                 model=self.settings.LMSTUDIO_MODEL.strip(),
                 base_url=self.settings.LMSTUDIO_BASE_URL.strip(),
                 api_key=self.settings.LMSTUDIO_API_KEY or "not-needed",
                 temperature=0.1,
                 max_tokens=LLM_MAX_TOKENS,
-            )
+            )]
         
         elif provider == "openai":
             if not self.settings.OPENAI_API_KEY:
                 raise ValueError("OPENAI_API_KEY is required for OpenAI provider")
             logger.info(f"Initializing OpenAI LLM with model: {self.settings.OPENAI_MODEL}")
-            return ChatOpenAI(
+            return [ChatOpenAI(
                 model=self.settings.OPENAI_MODEL.strip(),
                 api_key=self.settings.OPENAI_API_KEY.strip(),
                 temperature=0.1,
                 max_tokens=4096,
-            )
+            )]
         
         elif provider == "anthropic":
             if not self.settings.ANTHROPIC_API_KEY:
                 raise ValueError("ANTHROPIC_API_KEY is required for Anthropic provider")
             logger.info(f"Initializing Anthropic LLM with model: {self.settings.ANTHROPIC_MODEL}")
-            return ChatAnthropic(
+            return [ChatAnthropic(
                 model=self.settings.ANTHROPIC_MODEL.strip(),
                 api_key=self.settings.ANTHROPIC_API_KEY.strip(),
                 temperature=0.1,
                 max_tokens=4096,
-            )
+            )]
+            
+        elif provider == "gemini":
+            if not self.settings.GEMINI_API_KEY:
+                raise ValueError("GEMINI_API_KEY is required for Google Gemini provider")
+            logger.info(f"Initializing Gemini LLM with model: {self.settings.GEMINI_MODEL}")
+            return [ChatGoogleGenerativeAI(
+                model=self.settings.GEMINI_MODEL.strip(),
+                google_api_key=self.settings.GEMINI_API_KEY.strip(),
+                temperature=0.1,
+                max_retries=3,
+                streaming=True
+            )]
+            
+        elif provider == "groq":
+            keys = parse_keys(self.settings.GROQ_API_KEYS)
+            if not keys:
+                raise ValueError("GROQ_API_KEYS is required for Groq provider")
+            logger.info(f"Initializing Groq LLM with {len(keys)} keys using round-robin rotation.")
+            return [ChatGroq(
+                model=self.settings.GROQ_MODEL.strip(),
+                api_key=key,
+                temperature=0.1,
+                max_retries=3
+            ) for key in keys]
+            
+        elif provider == "openrouter":
+            keys = parse_keys(self.settings.OPENROUTER_API_KEYS)
+            if not keys:
+                raise ValueError("OPENROUTER_API_KEYS is required for OpenRouter provider")
+            logger.info(f"Initializing OpenRouter LLM with {len(keys)} keys using round-robin rotation.")
+            return [ChatOpenAI(
+                model=self.settings.OPENROUTER_MODEL.strip(),
+                api_key=key,
+                base_url=self.settings.OPENROUTER_BASE_URL.strip(),
+                temperature=0.1,
+                max_retries=3
+            ) for key in keys]
         
         else:
             raise ValueError(f"Unsupported LLM provider: {provider}")
@@ -98,6 +168,14 @@ class LLMService:
         """
         messages = []
         
+        # Enforce reasoning step if the model isn't natively a reasoning model
+        reasoner_instruction = "\n\nCRITICAL: You must first think step-by-step inside <think>...</think> tags. Then provide your final answer."
+        if not self._is_reasoning_model():
+            if system_prompt:
+                system_prompt = f"{system_prompt.strip()}{reasoner_instruction}"
+            else:
+                system_prompt = reasoner_instruction
+                
         if system_prompt:
             messages.append(SystemMessage(content=system_prompt.strip()))
         
@@ -117,9 +195,60 @@ class LLMService:
         
         try:
             logger.debug(f"Sending prompt to LLM (length: {len(prompt)} chars)")
-            response = await self.llm.ainvoke(messages)
-            logger.debug(f"LLM response received (length: {len(response.content)} chars)")
-            return response.content.strip()
+            model_instance = await self.get_model()
+            
+            provider = self.settings.LLM_PROVIDER.strip().lower()
+            
+            # Apply Gemini Rate Limiter and Cooldown
+            if self._gemini_limiter and provider == "gemini":
+                estimated_tokens = len(prompt) // 4
+                if hasattr(self, '_gemini_tpm_limiter') and self._gemini_tpm_limiter:
+                    safe_token_acquire = min(estimated_tokens, self._gemini_tpm_limiter.max_rate)
+                    await self._gemini_tpm_limiter.acquire(safe_token_acquire)
+                if hasattr(self, '_gemini_rpd_limiter') and self._gemini_rpd_limiter:
+                    await self._gemini_rpd_limiter.acquire()
+                    
+                async with self._gemini_limiter:
+                    await asyncio.sleep(self.settings.GEMINI_COOLDOWN_SEC)
+                    
+                    print(f"\n\033[92m[{provider.upper()}] Streaming Output:\033[0m ", end="", flush=True)
+                    response_content = ""
+                    async for chunk in model_instance.astream(messages):
+                        token = getattr(chunk, 'content', str(chunk))
+                        if token:
+                            print(token, end="", flush=True)
+                            response_content += str(token)
+                    print("\n")
+            else:
+                print(f"\n\033[92m[{provider.upper()}] Streaming Output:\033[0m ", end="", flush=True)
+                response_content = ""
+                async for chunk in model_instance.astream(messages):
+                    token = getattr(chunk, 'content', str(chunk))
+                    if token:
+                        print(token, end="", flush=True)
+                        response_content += str(token)
+                print("\n")
+                
+            logger.debug(f"LLM response received (length: {len(response_content)} chars)")
+            
+            content = response_content.strip()
+            
+            # Extract and handle reasoning tags
+            if "<think>" in content:
+                think_start = content.find("<think>")
+                think_end = content.find("</think>")
+                
+                if think_end != -1:
+                    reasoning_content = content[think_start + 7:think_end].strip()
+                    content = content[:think_start] + content[think_end + 8:]
+                else:
+                    reasoning_content = content[think_start + 7:].strip()
+                    content = content[:think_start]
+                
+                if reasoning_content:
+                    logger.info("🧠 Reasoning Process:\n" + reasoning_content[:500] + ("..." if len(reasoning_content) > 500 else ""))
+            
+            return content.strip()
         except Exception as e:
             logger.error(f"LLM generation error: {str(e)}")
             raise
@@ -344,9 +473,19 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
         messages.append(HumanMessage(content=prompt.strip()))
         
         try:
-            async for chunk in self.llm.astream(messages):
-                if chunk.content:
-                    yield chunk.content
+            model_instance = await self.get_model()
+            
+            # Streaming also applies to limits
+            if self._gemini_limiter:
+                async with self._gemini_limiter:
+                    await asyncio.sleep(self.settings.GEMINI_COOLDOWN_SEC)
+                    async for chunk in model_instance.astream(messages):
+                        if chunk.content:
+                            yield chunk.content
+            else:
+                async for chunk in model_instance.astream(messages):
+                    if chunk.content:
+                        yield chunk.content
         except Exception as e:
             logger.error(f"LLM streaming error: {str(e)}")
             raise
@@ -375,7 +514,19 @@ YOUR RESPONSE MUST BE VALID JSON ONLY (no markdown, no explanation):"""
             return self.settings.OPENAI_MODEL.strip()
         elif provider == "anthropic":
             return self.settings.ANTHROPIC_MODEL.strip()
+        elif provider == "gemini":
+            return self.settings.GEMINI_MODEL.strip()
+        elif provider == "groq":
+            return self.settings.GROQ_MODEL.strip()
+        elif provider == "openrouter":
+            return self.settings.OPENROUTER_MODEL.strip()
         return "unknown"
+
+    def _is_reasoning_model(self) -> bool:
+        """Detect if the current model natively supports reasoning."""
+        model_name = self._get_model_name().lower()
+        reasoning_keywords = ["reasoning", "deepseek-r1", "deepseek-reasoner", "o1", "o3", "think"]
+        return any(kw in model_name for kw in reasoning_keywords)
 
 
 # Singleton instance

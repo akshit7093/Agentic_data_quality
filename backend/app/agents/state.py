@@ -87,6 +87,16 @@ class ValidationResult:
     
     # NEW: Track exactly what the agent executed
     executed_query: Optional[str] = None
+    
+    # Column this result belongs to — required for grouped dashboard display
+    column_name: Optional[str] = None
+
+    # Check origin tracking: "pre_built" (deterministic) or "llm_generated" (agent-created)
+    check_origin: str = "pre_built"
+    # Why the agent chose this check
+    agent_reasoning: Optional[str] = None
+    # What the agent understood from the results
+    agent_comprehension: Optional[str] = None
 
 
 @dataclass
@@ -100,9 +110,7 @@ class DataProfile:
 
 
 class AgentState(TypedDict):
-    """LangGraph agent state.
-    Serves as the memory and context for the ReAct loop.
-    """
+    """LangGraph agent state."""
     # Input
     validation_id: str
     validation_mode: ValidationMode
@@ -126,9 +134,14 @@ class AgentState(TypedDict):
     # Context for RAG
     retrieved_context: List[Dict[str, Any]]
     
-    # NEW: Loop Breaker / Step Trackers
+    # Loop Breaker / Step Trackers
     exploration_steps: int
     validation_steps: int
+    current_column_index: int
+    columns_to_validate: List[Dict[str, Any]]
+    available_column_tools: Dict[str, List[Dict[str, Any]]]
+    tool_execution_history: List[Dict[str, Any]]
+    rag_chunks_saved: Optional[int]
     
     # Output
     quality_score: Optional[float]
@@ -139,3 +152,7 @@ class AgentState(TypedDict):
     started_at: Optional[str]
     completed_at: Optional[str]
     execution_metrics: Dict[str, Any]
+    
+    # NEW: Query tracking for deduplication
+    executed_queries: List[str]
+    queries_per_column: Dict[str, int]

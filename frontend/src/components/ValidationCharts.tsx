@@ -91,7 +91,7 @@ export default function ValidationCharts({ results, qualityScore }: Props) {
 
     if (results.length === 0) {
         return (
-            <div className="text-center py-12 text-gray-500">
+            <div className="text-center py-12 text-slate-400">
                 No results data to visualize.
             </div>
         );
@@ -104,7 +104,7 @@ export default function ValidationCharts({ results, qualityScore }: Props) {
                 {/* Quality Score Gauge */}
                 <div className="card">
                     <div className="card-body">
-                        <h3 className="text-sm font-semibold text-gray-700 mb-4">Quality Score</h3>
+                        <h3 className="text-sm font-semibold text-slate-300 mb-4">Quality Score</h3>
                         <div className="flex items-center justify-center">
                             <ResponsiveContainer width={200} height={200}>
                                 <RadialBarChart
@@ -117,7 +117,7 @@ export default function ValidationCharts({ results, qualityScore }: Props) {
                                     <RadialBar
                                         dataKey="value"
                                         cornerRadius={10}
-                                        background={{ fill: '#e5e7eb' }}
+                                        background={{ fill: '#1e293b' }}
                                     />
                                 </RadialBarChart>
                             </ResponsiveContainer>
@@ -127,7 +127,7 @@ export default function ValidationCharts({ results, qualityScore }: Props) {
                                 </div>
                             </div>
                         </div>
-                        <div className="text-center text-xs text-gray-500 mt-2">
+                        <div className="text-center text-xs text-slate-400 mt-2">
                             {qualityScore >= 90 ? 'Excellent' : qualityScore >= 70 ? 'Needs Attention' : 'Critical Issues'}
                         </div>
                     </div>
@@ -136,7 +136,7 @@ export default function ValidationCharts({ results, qualityScore }: Props) {
                 {/* Severity Distribution Donut */}
                 <div className="card">
                     <div className="card-body">
-                        <h3 className="text-sm font-semibold text-gray-700 mb-4">Severity Distribution</h3>
+                        <h3 className="text-sm font-semibold text-slate-300 mb-4">Severity Distribution</h3>
                         <ResponsiveContainer width="100%" height={220}>
                             <PieChart>
                                 <Pie
@@ -163,10 +163,10 @@ export default function ValidationCharts({ results, qualityScore }: Props) {
             {/* Row 2: Rule Type Breakdown */}
             <div className="card">
                 <div className="card-body">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-4">Results by Rule Type</h3>
+                    <h3 className="text-sm font-semibold text-slate-300 mb-4">Results by Rule Type</h3>
                     <ResponsiveContainer width="100%" height={Math.max(200, ruleTypeData.length * 40)}>
                         <BarChart data={ruleTypeData} layout="vertical" margin={{ left: 100, right: 20, top: 5, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                             <XAxis type="number" />
                             <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 12 }} />
                             <Tooltip
@@ -174,11 +174,11 @@ export default function ValidationCharts({ results, qualityScore }: Props) {
                                     if (!active || !payload?.length) return null;
                                     const d = payload[0].payload;
                                     return (
-                                        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-xs">
+                                        <div className="bg-royal-green-900 border border-royal-green-600 rounded-lg shadow-lg p-3 text-xs">
                                             <div className="font-semibold mb-1">{d.fullName}</div>
-                                            <div className="text-green-600">Passed: {d.passed}</div>
-                                            <div className="text-red-500">Failed: {d.failed}</div>
-                                            {d.warning > 0 && <div className="text-yellow-500">Warning: {d.warning}</div>}
+                                            <div className="text-emerald-400">Passed: {d.passed}</div>
+                                            <div className="text-red-400">Failed: {d.failed}</div>
+                                            {d.warning > 0 && <div className="text-yellow-400">Warning: {d.warning}</div>}
                                         </div>
                                     );
                                 }}
@@ -196,16 +196,16 @@ export default function ValidationCharts({ results, qualityScore }: Props) {
             {heatmapData.length > 0 && (
                 <div className="card">
                     <div className="card-body">
-                        <h3 className="text-sm font-semibold text-gray-700 mb-4">Rule Failure Overview</h3>
+                        <h3 className="text-sm font-semibold text-slate-300 mb-4">Rule Failure Overview</h3>
                         <div className="grid grid-cols-1 gap-2">
                             {heatmapData.map(item => {
                                 const failPercent = item.total > 0 ? (item.failed / item.total) * 100 : 0;
                                 return (
                                     <div key={item.rule} className="flex items-center gap-3">
-                                        <div className="w-48 text-xs text-gray-700 truncate font-medium" title={item.rule}>
+                                        <div className="w-48 text-xs text-slate-300 truncate font-medium" title={item.rule}>
                                             {item.rule}
                                         </div>
-                                        <div className="flex-1 h-6 bg-gray-100 rounded-full overflow-hidden relative">
+                                        <div className="flex-1 h-6 bg-royal-green-800 rounded-full overflow-hidden relative">
                                             <div
                                                 className="h-full rounded-full transition-all"
                                                 style={{
@@ -213,11 +213,11 @@ export default function ValidationCharts({ results, qualityScore }: Props) {
                                                     backgroundColor: failPercent === 0 ? '#22c55e' : failPercent < 30 ? '#86efac' : failPercent < 70 ? '#fbbf24' : '#ef4444',
                                                 }}
                                             />
-                                            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-gray-700">
+                                            <div className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-slate-300">
                                                 {item.failed === 0 ? '✓ Pass' : `${item.failed}/${item.total} failed`}
                                             </div>
                                         </div>
-                                        <div className="w-16 text-right text-xs font-mono text-gray-500">
+                                        <div className="w-16 text-right text-xs font-mono text-slate-400">
                                             {(100 - failPercent).toFixed(0)}%
                                         </div>
                                     </div>

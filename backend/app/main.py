@@ -1,5 +1,6 @@
 """Main FastAPI application."""
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -36,8 +37,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"RAG service initialization failed: {str(e)}")
     
-    yield
-    
+    try:
+        yield
+    except asyncio.CancelledError:
+        # Expected during forceful app shutdown
+        pass
+        
     # Shutdown
     logger.info("Shutting down AI Data Quality Agent...")
 

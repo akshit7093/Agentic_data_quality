@@ -150,10 +150,13 @@ class LocalFileConnector(FileConnector):
             full_df = df
             total_rows = len(full_df)
 
+        if df.empty:
+            logger.warning(f"Inferring schema from empty DataFrame for {resource_path}")
+            
         columns = {}
         for col_name, dtype in df.dtypes.items():
             # If we successfully loaded full_df, calculate absolute metrics natively
-            if col_name in full_df.columns:
+            if not full_df.empty and col_name in full_df.columns:
                 null_count = int(full_df[col_name].isnull().sum())
                 unique_count = int(full_df[col_name].nunique(dropna=True))
                 null_percent = round((null_count / total_rows * 100)) if total_rows > 0 else 0
@@ -164,8 +167,8 @@ class LocalFileConnector(FileConnector):
 
             columns[col_name] = {
                 "type": str(dtype),
-                "pandas_type": dtype.name,
-                "nullable": bool(df[col_name].isnull().any()),
+                "pandas_type": str(dtype.name),
+                "nullable": bool(df[col_name].isnull().any()) if col_name in df.columns else True,
                 "null_count": null_count,
                 "unique_count": unique_count,
                 "null_percent": null_percent,
@@ -189,13 +192,28 @@ class LocalFileConnector(FileConnector):
         """Read file into DataFrame."""
         
         if file_format == 'csv':
-            df = pd.read_csv(
-                file_path,
-                usecols=columns,
-                nrows=limit,
-                skiprows=range(1, offset + 1) if offset else None,
-                low_memory=False,
-            )
+            logger.info(f"Reading CSV: {file_path} (limit={limit}, offset={offset})")
+            try:
+                # Try standard utf-8 first
+                df = pd.read_csv(
+                    file_path,
+                    usecols=columns,
+                    nrows=limit,
+                    skiprows=range(1, offset + 1) if offset else None,
+                    low_memory=False,
+                )
+            except (UnicodeDecodeError, Exception) as e:
+                logger.warning(f"Failed to read CSV {file_path} with utf-8: {e}. Trying latin1...")
+                # Fallback to latin1 which is common for legacy CSVs
+                df = pd.read_csv(
+                    file_path,
+                    usecols=columns,
+                    nrows=limit,
+                    skiprows=range(1, offset + 1) if offset else None,
+                    low_memory=False,
+                    encoding='latin1'
+                )
+            logger.info(f"Successfully read CSV. Rows: {len(df)}, Columns: {len(df.columns)}")
         
         elif file_format == 'excel':
             df = pd.read_excel(

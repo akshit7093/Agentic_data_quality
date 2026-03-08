@@ -344,7 +344,7 @@ def validate_protocol(
         )
 
     has_json_fence = bool(re.search(r'```(?:json)?\s*[\s\S]*?```', response, re.IGNORECASE))
-    has_raw_json_obj = bool(re.search(r'\{[\s\S]*"action"\s*:', response))
+    has_raw_json_obj = bool(re.search(r'\{[\s\S]*?"action"[\s\S]*?\}', response))
     has_structural_tag = bool(re.search(
         r'<(?:METADATA|REPORT)>[\s\S]*?</(?:METADATA|REPORT)>', response, re.IGNORECASE
     ))

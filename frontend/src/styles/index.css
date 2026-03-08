@@ -3,108 +3,117 @@
 @tailwind utilities;
 
 @layer base {
-  * {
-    @apply border-gray-200;
-  }
-  
   body {
-    @apply font-sans antialiased bg-gray-50 text-gray-900;
+    @apply bg-black text-slate-100 font-display;
   }
 }
 
 @layer components {
+  .glow-button {
+    @apply relative overflow-hidden;
+  }
+
+  .glow-button::after {
+    @apply content-[''] absolute inset-0 rounded-lg opacity-0 transition-opacity duration-300;
+    box-shadow: 0 0 15px 2px theme('colors.primary');
+  }
+
+  .glow-button:hover::after {
+    @apply opacity-50;
+  }
+
   .btn {
-    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2;
+    @apply inline-flex items-center justify-center px-4 py-2 text-sm font-medium rounded-lg transition-all focus:outline-none focus:ring-2 focus:ring-primary/50;
   }
-  
+
   .btn-primary {
-    @apply btn bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500;
+    @apply btn bg-primary text-white hover:bg-primary/90 active:scale-95 glow-button;
   }
-  
+
   .btn-secondary {
-    @apply btn bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-primary-500;
+    @apply btn bg-royal-green-900/50 border border-royal-green-600 text-slate-300 hover:bg-royal-green-800 focus:ring-royal-green-500;
   }
-  
+
   .btn-danger {
-    @apply btn bg-danger-600 text-white hover:bg-danger-700 focus:ring-danger-500;
+    @apply btn bg-danger-500/20 text-danger-400 hover:bg-danger-500/30 border border-danger-500/50 focus:ring-danger-500;
   }
-  
+
   .btn-success {
-    @apply btn bg-success-600 text-white hover:bg-success-700 focus:ring-success-500;
+    @apply btn bg-success-500/20 text-success-400 hover:bg-success-500/30 border border-success-500/50 focus:ring-success-500;
   }
-  
+
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-200;
+    @apply bg-royal-green-900/50 rounded-xl border border-royal-green-600 backdrop-blur-md;
   }
-  
+
   .card-header {
-    @apply px-6 py-4 border-b border-gray-200;
+    @apply px-6 py-4 border-b border-royal-green-600;
   }
-  
+
   .card-body {
     @apply px-6 py-4;
   }
-  
+
   .form-label {
-    @apply block text-sm font-medium text-gray-700 mb-1;
+    @apply block text-sm font-bold text-slate-300 mb-2;
   }
-  
+
   .form-input {
-    @apply block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm;
+    @apply block w-full px-4 py-3 bg-royal-green-900 border border-royal-green-600 rounded-lg text-slate-100 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary transition-all sm:text-sm;
   }
-  
+
   .form-select {
-    @apply block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm;
+    @apply block w-full px-4 py-3 bg-royal-green-900 border border-royal-green-600 rounded-lg text-slate-100 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary transition-all sm:text-sm;
   }
-  
+
   .form-textarea {
-    @apply block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-primary-500 focus:border-primary-500 sm:text-sm;
+    @apply block w-full px-4 py-3 bg-royal-green-900 border border-royal-green-600 rounded-lg text-slate-100 shadow-sm focus:ring-1 focus:ring-primary focus:border-primary transition-all sm:text-sm;
   }
-  
+
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center px-2.5 py-1 rounded border text-xs font-bold uppercase tracking-wider;
   }
-  
+
   .badge-success {
-    @apply badge bg-success-100 text-success-800;
+    @apply badge bg-success-500/10 text-success-400 border-success-500/20;
   }
-  
+
   .badge-warning {
-    @apply badge bg-warning-100 text-warning-800;
+    @apply badge bg-warning-500/10 text-warning-400 border-warning-500/20;
   }
-  
+
   .badge-danger {
-    @apply badge bg-danger-100 text-danger-800;
+    @apply badge bg-danger-500/10 text-danger-400 border-danger-500/20;
   }
-  
+
   .badge-info {
-    @apply badge bg-primary-100 text-primary-800;
+    @apply badge bg-primary/10 text-primary border-primary/20;
   }
-  
+
   .status-dot {
     @apply w-2.5 h-2.5 rounded-full;
   }
-  
+
   .status-dot-success {
-    @apply status-dot bg-success-500;
+    @apply status-dot bg-success-500 shadow-[0_0_8px_rgba(34, 197, 94, 0.6)];
   }
-  
+
   .status-dot-warning {
-    @apply status-dot bg-warning-500;
+    @apply status-dot bg-warning-500 shadow-[0_0_8px_rgba(245, 158, 11, 0.6)];
   }
-  
+
   .status-dot-danger {
-    @apply status-dot bg-danger-500;
+    @apply status-dot bg-danger-500 shadow-[0_0_8px_rgba(239, 68, 68, 0.6)];
   }
-  
+
   .status-dot-pending {
-    @apply status-dot bg-gray-400 animate-pulse;
+    @apply status-dot bg-slate-500 animate-pulse;
   }
 }
 
 @layer utilities {
   .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary-600 to-primary-800;
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-royal-green-300;
   }
 }
 
@@ -115,15 +124,15 @@
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-gray-100 rounded;
+  @apply bg-black rounded;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-gray-300 rounded;
+  @apply bg-royal-green-700 rounded border border-black;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-gray-400;
+  @apply bg-royal-green-600;
 }
 
 /* Animation for loading states */
@@ -132,6 +141,7 @@
     transform: scale(0.8);
     opacity: 0.5;
   }
+
   100% {
     transform: scale(1.2);
     opacity: 0;

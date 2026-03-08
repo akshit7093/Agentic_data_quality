@@ -65,6 +65,8 @@ export const systemApi = {
   health: () => api.get('/health').then(r => r.data),
   llmHealth: () => api.get<LLMHealth>('/llm/health').then(r => r.data),
   getSupportedSources: () => api.get<{ source_types: string[] }>('/supported-sources').then(r => r.data),
+  getSettings: () => api.get('/settings').then(r => r.data),
+  updateSettings: (data: any) => api.post('/settings', data).then(r => r.data),
 };
 
 // File Upload

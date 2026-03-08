@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Brain,
   Database,
@@ -9,8 +9,17 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
+  Cpu,
+  Box,
+  Cloud,
+  Zap,
+  Globe,
+  Server,
+  Settings2,
+  Info
 } from 'lucide-react';
 import { useLLMHealth } from '@/hooks/useSystem';
+import { systemApi } from '@/services/api';
 
 interface LLMSettings {
   provider: string;
@@ -21,7 +30,23 @@ interface LLMSettings {
   openai_model: string;
   anthropic_api_key: string;
   anthropic_model: string;
+  gemini_api_key: string;
+  gemini_model: string;
+  groq_api_keys: string;
+  groq_model: string;
+  openrouter_api_keys: string;
+  openrouter_model: string;
 }
+
+const PROVIDERS = [
+  { id: 'ollama', name: 'Ollama', type: 'Local Hosting', icon: Server },
+  { id: 'lmstudio', name: 'LM Studio', type: 'Local Desktop', icon: Box },
+  { id: 'openai', name: 'OpenAI', type: 'Cloud API', icon: Cloud },
+  { id: 'anthropic', name: 'Anthropic', type: 'Cloud', icon: Brain },
+  { id: 'gemini', name: 'Google Gemini', type: 'Fast Cloud', icon: Zap },
+  { id: 'groq', name: 'Groq LPU', type: 'Hyper-fast', icon: Cpu },
+  { id: 'openrouter', name: 'OpenRouter', type: 'Aggregated', icon: Globe },
+];
 
 export default function SettingsPage() {
   const { data: llmHealth, refetch: refetchLLMHealth } = useLLMHealth();
@@ -37,7 +62,27 @@ export default function SettingsPage() {
     openai_model: 'gpt-4',
     anthropic_api_key: '',
     anthropic_model: 'claude-3-5-sonnet-20241022',
+    gemini_api_key: '',
+    gemini_model: 'gemini-1.5-pro',
+    groq_api_keys: '',
+    groq_model: 'llama3-70b-8192',
+    openrouter_api_keys: '',
+    openrouter_model: 'google/gemini-pro-1.5',
   });
+
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const data = await systemApi.getSettings();
+        setLLMSettings(data);
+      } catch (e) {
+        console.error("Failed to load LLM settings from backend.", e);
+      }
+    };
+    loadSettings();
+  }, []);
 
   const handleTestConnection = async () => {
     setIsTesting(true);
@@ -46,527 +91,446 @@ export default function SettingsPage() {
   };
 
   const handleSave = async () => {
-    // Would save settings to backend
-    alert('Settings saved!');
+    try {
+      setSaving(true);
+      await systemApi.updateSettings(llmSettings);
+      alert('Settings saved and successfully updated on the backend!');
+      await refetchLLMHealth();
+    } catch (e) {
+      console.error(e);
+      alert('Failed to save settings to backend.');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tabs = [
-    { id: 'llm', name: 'LLM Configuration', icon: Brain },
-    { id: 'database', name: 'Database', icon: Database },
-    { id: 'notifications', name: 'Notifications', icon: Bell },
-    { id: 'security', name: 'Security', icon: Shield },
+    { id: 'llm', name: 'LLM Configuration' },
+    { id: 'database', name: 'Database' },
+    { id: 'notifications', name: 'Notifications' },
+    { id: 'security', name: 'Security' },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Configure your AI Data Quality Agent
-        </p>
+    <div className="max-w-5xl">
+      {/* Tabs Navigation */}
+      <div className="mb-8 border-b border-royal-green-600">
+        <div className="flex gap-8 overflow-x-auto pb-px">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex flex-col items-center border-b-2 px-1 pb-4 transition-all ${activeTab === tab.id
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+                }`}
+            >
+              <span className="text-sm font-bold whitespace-nowrap">{tab.name}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="flex space-x-6">
-        {/* Sidebar tabs */}
-        <div className="w-64 flex-shrink-0">
-          <nav className="space-y-1">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-colors ${activeTab === tab.id
-                    ? 'bg-primary-50 text-primary-700'
-                    : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-              >
-                <tab.icon
-                  className={`w-5 h-5 mr-3 ${activeTab === tab.id ? 'text-primary-600' : 'text-gray-400'
-                    }`}
-                />
-                {tab.name}
-              </button>
-            ))}
-          </nav>
-        </div>
+      <div className="max-w-5xl">
+        {activeTab === 'llm' && (
+          <>
+            {/* Header Section */}
+            <div className="mb-8">
+              <h1 className="text-2xl text-slate-100 font-bold mb-2">LLM Provider Configuration</h1>
+              <p className="text-slate-400">Select and configure your preferred Large Language Model provider for system-wide operations.</p>
+            </div>
 
-        {/* Content */}
-        <div className="flex-1">
-          {activeTab === 'llm' && (
-            <div className="card">
-              <div className="card-header">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  LLM Configuration
-                </h2>
-              </div>
-              <div className="card-body space-y-6">
-                {/* Provider Selection */}
-                <div>
-                  <label className="form-label">LLM Provider</label>
-                  <div className="grid grid-cols-2 gap-4 mt-2">
-                    <label className="flex items-center p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input
-                        type="radio"
-                        name="provider"
-                        value="ollama"
-                        checked={llmSettings.provider === 'ollama'}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            provider: e.target.value,
-                          })
-                        }
-                        className="mr-3"
-                      />
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">
-                          Ollama (Local)
-                        </span>
-                        <p className="text-xs text-gray-500">
-                          Run models locally on your machine
-                        </p>
+            {/* Provider Cards Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-10">
+              {PROVIDERS.map((provider) => {
+                const isActive = llmSettings.provider === provider.id;
+                return (
+                  <div
+                    key={provider.id}
+                    onClick={() => setLLMSettings({ ...llmSettings, provider: provider.id })}
+                    className={`relative group cursor-pointer overflow-hidden rounded-xl border-2 p-4 transition-all ${isActive
+                      ? 'border-primary bg-primary/5 hover:bg-primary/10'
+                      : 'border-royal-green-600 bg-royal-green-800 hover:border-primary/50'
+                      }`}
+                  >
+                    {isActive && (
+                      <div className="absolute top-2 right-2 text-primary">
+                        <CheckCircle className="w-4 h-4" />
                       </div>
-                    </label>
-
-                    <label className="flex items-center p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input
-                        type="radio"
-                        name="provider"
-                        value="lmstudio"
-                        checked={llmSettings.provider === 'lmstudio'}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            provider: e.target.value,
-                          })
-                        }
-                        className="mr-3"
-                      />
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">
-                          LM Studio
-                        </span>
-                        <p className="text-xs text-gray-500">
-                          Use LM Studio local server
-                        </p>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input
-                        type="radio"
-                        name="provider"
-                        value="openai"
-                        checked={llmSettings.provider === 'openai'}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            provider: e.target.value,
-                          })
-                        }
-                        className="mr-3"
-                      />
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">
-                          OpenAI
-                        </span>
-                        <p className="text-xs text-gray-500">
-                          Use OpenAI API (GPT-4, etc.)
-                        </p>
-                      </div>
-                    </label>
-
-                    <label className="flex items-center p-4 border border-gray-200 rounded-lg cursor-pointer hover:bg-gray-50">
-                      <input
-                        type="radio"
-                        name="provider"
-                        value="anthropic"
-                        checked={llmSettings.provider === 'anthropic'}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            provider: e.target.value,
-                          })
-                        }
-                        className="mr-3"
-                      />
-                      <div>
-                        <span className="text-sm font-medium text-gray-900">
-                          Anthropic
-                        </span>
-                        <p className="text-xs text-gray-500">
-                          Use Anthropic API (Claude)
-                        </p>
-                      </div>
-                    </label>
+                    )}
+                    <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${isActive
+                      ? 'bg-primary text-white'
+                      : 'bg-royal-green-700 text-slate-300 group-hover:bg-primary/20 group-hover:text-primary'
+                      }`}>
+                      <provider.icon className="w-5 h-5" />
+                    </div>
+                    <h3 className="font-bold text-[13px] text-slate-100 whitespace-nowrap">{provider.name}</h3>
+                    <p className={`text-[10px] mt-1 whitespace-nowrap overflow-hidden text-ellipsis ${isActive ? 'text-primary font-medium' : 'text-slate-500'
+                      }`}>
+                      {provider.type}
+                    </p>
                   </div>
-                </div>
+                );
+              })}
+            </div>
 
-                {/* Provider-specific settings */}
+            {/* Configuration Form */}
+            <div className="rounded-xl border border-royal-green-600 bg-royal-green-800 p-6 lg:p-8">
+              <h2 className="text-lg text-slate-100 font-bold mb-6 flex items-center gap-2">
+                <Settings2 className="w-5 h-5 text-primary" />
+                {PROVIDERS.find(p => p.id === llmSettings.provider)?.name} Settings
+              </h2>
+
+              <div className="space-y-6">
                 {llmSettings.provider === 'ollama' && (
-                  <div className="space-y-4 border-t border-gray-200 pt-4">
-                    <h3 className="text-sm font-medium text-gray-900">
-                      Ollama Settings
-                    </h3>
-                    <div>
-                      <label className="form-label">Base URL</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">API Host URL</label>
                       <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                         type="text"
-                        className="form-input"
                         value={llmSettings.ollama_base_url}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            ollama_base_url: e.target.value,
-                          })
-                        }
+                        onChange={(e) => setLLMSettings({ ...llmSettings, ollama_base_url: e.target.value })}
                       />
                     </div>
-                    <div>
-                      <label className="form-label">Model</label>
-                      <select
-                        className="form-select"
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">Model</label>
+                      <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                        type="text"
                         value={llmSettings.ollama_model}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            ollama_model: e.target.value,
-                          })
-                        }
-                      >
-                        <option value="llama3.2">Llama 3.2</option>
-                        <option value="llama3.1">Llama 3.1</option>
-                        <option value="mistral">Mistral</option>
-                        <option value="codellama">CodeLlama</option>
-                        <option value="phi3">Phi-3</option>
-                      </select>
+                        onChange={(e) => setLLMSettings({ ...llmSettings, ollama_model: e.target.value })}
+                      />
                     </div>
                   </div>
                 )}
 
                 {llmSettings.provider === 'lmstudio' && (
-                  <div className="space-y-4 border-t border-gray-200 pt-4">
-                    <h3 className="text-sm font-medium text-gray-900">
-                      LM Studio Settings
-                    </h3>
-                    <div>
-                      <label className="form-label">Base URL</label>
+                  <div className="grid grid-cols-1 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">API Host URL</label>
                       <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                         type="text"
-                        className="form-input"
                         value={llmSettings.lmstudio_base_url}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            lmstudio_base_url: e.target.value,
-                          })
-                        }
+                        onChange={(e) => setLLMSettings({ ...llmSettings, lmstudio_base_url: e.target.value })}
                       />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Default: http://localhost:1234/v1
-                      </p>
                     </div>
                   </div>
                 )}
 
                 {llmSettings.provider === 'openai' && (
-                  <div className="space-y-4 border-t border-gray-200 pt-4">
-                    <h3 className="text-sm font-medium text-gray-900">
-                      OpenAI Settings
-                    </h3>
-                    <div>
-                      <label className="form-label">API Key</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">API Key</label>
                       <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                         type="password"
-                        className="form-input"
                         placeholder="sk-..."
                         value={llmSettings.openai_api_key}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            openai_api_key: e.target.value,
-                          })
-                        }
+                        onChange={(e) => setLLMSettings({ ...llmSettings, openai_api_key: e.target.value })}
                       />
                     </div>
-                    <div>
-                      <label className="form-label">Model</label>
-                      <select
-                        className="form-select"
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">Model</label>
+                      <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                        type="text"
                         value={llmSettings.openai_model}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            openai_model: e.target.value,
-                          })
-                        }
-                      >
-                        <option value="gpt-4">GPT-4</option>
-                        <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                        <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                      </select>
+                        onChange={(e) => setLLMSettings({ ...llmSettings, openai_model: e.target.value })}
+                      />
                     </div>
                   </div>
                 )}
 
                 {llmSettings.provider === 'anthropic' && (
-                  <div className="space-y-4 border-t border-gray-200 pt-4">
-                    <h3 className="text-sm font-medium text-gray-900">
-                      Anthropic Settings
-                    </h3>
-                    <div>
-                      <label className="form-label">API Key</label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">API Key</label>
                       <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                         type="password"
-                        className="form-input"
                         placeholder="sk-ant-..."
                         value={llmSettings.anthropic_api_key}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            anthropic_api_key: e.target.value,
-                          })
-                        }
+                        onChange={(e) => setLLMSettings({ ...llmSettings, anthropic_api_key: e.target.value })}
                       />
                     </div>
-                    <div>
-                      <label className="form-label">Model</label>
-                      <select
-                        className="form-select"
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">Model</label>
+                      <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                        type="text"
                         value={llmSettings.anthropic_model}
-                        onChange={(e) =>
-                          setLLMSettings({
-                            ...llmSettings,
-                            anthropic_model: e.target.value,
-                          })
-                        }
-                      >
-                        <option value="claude-3-5-sonnet-20241022">
-                          Claude 3.5 Sonnet
-                        </option>
-                        <option value="claude-3-opus-20240229">
-                          Claude 3 Opus
-                        </option>
-                        <option value="claude-3-sonnet-20240229">
-                          Claude 3 Sonnet
-                        </option>
-                        <option value="claude-3-haiku-20240307">
-                          Claude 3 Haiku
-                        </option>
-                      </select>
+                        onChange={(e) => setLLMSettings({ ...llmSettings, anthropic_model: e.target.value })}
+                      />
                     </div>
                   </div>
                 )}
 
-                {/* Connection Status */}
-                <div className="border-t border-gray-200 pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-sm font-medium text-gray-900">
-                        Connection Status
-                      </h3>
-                      <div className="flex items-center mt-2">
-                        {llmHealth?.status === 'healthy' ? (
-                          <>
-                            <CheckCircle className="w-5 h-5 text-success-500 mr-2" />
-                            <span className="text-sm text-success-600">
-                              Connected to {llmHealth.provider} ({llmHealth.model})
-                            </span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-5 h-5 text-danger-500 mr-2" />
-                            <span className="text-sm text-danger-600">
-                              {llmHealth?.error || 'Not connected'}
-                            </span>
-                          </>
-                        )}
-                      </div>
+                {llmSettings.provider === 'gemini' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">API Key</label>
+                      <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                        type="password"
+                        placeholder="AIza..."
+                        value={llmSettings.gemini_api_key}
+                        onChange={(e) => setLLMSettings({ ...llmSettings, gemini_api_key: e.target.value })}
+                      />
                     </div>
-                    <button
-                      onClick={handleTestConnection}
-                      disabled={isTesting}
-                      className="btn-secondary"
-                    >
-                      {isTesting ? (
-                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <RefreshCw className="w-4 h-4 mr-2" />
-                      )}
-                      Test Connection
-                    </button>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">Model</label>
+                      <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                        type="text"
+                        value={llmSettings.gemini_model}
+                        onChange={(e) => setLLMSettings({ ...llmSettings, gemini_model: e.target.value })}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
-                {/* Save button */}
-                <div className="flex justify-end pt-4 border-t border-gray-200">
-                  <button onClick={handleSave} className="btn-primary">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Settings
+                {llmSettings.provider === 'groq' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">API Key(s) <span className="text-xs text-slate-500 font-normal ml-2">Comma separated for rotation</span></label>
+                      <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                        type="password"
+                        placeholder="gsk_..., gsk_..."
+                        value={llmSettings.groq_api_keys}
+                        onChange={(e) => setLLMSettings({ ...llmSettings, groq_api_keys: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">Model</label>
+                      <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                        type="text"
+                        value={llmSettings.groq_model}
+                        onChange={(e) => setLLMSettings({ ...llmSettings, groq_model: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {llmSettings.provider === 'openrouter' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">API Key(s) <span className="text-xs text-slate-500 font-normal ml-2">Comma separated for rotation</span></label>
+                      <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                        type="password"
+                        placeholder="sk-or-v1-..."
+                        value={llmSettings.openrouter_api_keys}
+                        onChange={(e) => setLLMSettings({ ...llmSettings, openrouter_api_keys: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-300">Model</label>
+                      <input
+                        className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                        type="text"
+                        value={llmSettings.openrouter_model}
+                        onChange={(e) => setLLMSettings({ ...llmSettings, openrouter_model: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 pt-4 border-t border-royal-green-600">
+                  <button
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="flex items-center justify-center gap-2 rounded-lg bg-primary px-8 py-3 font-bold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+                  >
+                    <Save className="w-5 h-5" />
+                    {saving ? 'Saving...' : 'Save Settings'}
+                  </button>
+                  <button
+                    onClick={handleTestConnection}
+                    disabled={isTesting}
+                    className="flex items-center justify-center gap-2 rounded-lg border border-royal-green-600 bg-transparent px-8 py-3 font-bold text-slate-300 transition-all hover:bg-royal-green-700 active:scale-95 disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-5 h-5 ${isTesting ? 'animate-spin' : ''}`} />
+                    Test Connection
                   </button>
                 </div>
               </div>
             </div>
-          )}
 
-          {activeTab === 'database' && (
-            <div className="card">
-              <div className="card-header">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Database Configuration
-                </h2>
+            {/* Secondary Alert/Info Section */}
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex gap-4">
+                <div className="text-primary pt-1">
+                  {llmHealth?.status === 'healthy' ? (
+                    <CheckCircle className="w-5 h-5" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-red-500" />
+                  )}
+                </div>
+                <div>
+                  <h4 className="font-bold text-primary">Connection Status</h4>
+                  <p className="text-sm text-slate-400 mt-1">
+                    {llmHealth?.status === 'healthy'
+                      ? `Connected to ${llmHealth.provider} (${llmHealth.model})`
+                      : llmHealth?.error || 'Not connected'}
+                  </p>
+                </div>
               </div>
-              <div className="card-body space-y-4">
-                <div>
-                  <label className="form-label">Database URL</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="postgresql://user:pass@localhost:5432/dbname"
-                  />
+
+              <div className="rounded-xl border border-royal-green-600 bg-royal-green-800 p-4 flex gap-4">
+                <div className="text-yellow-500 pt-1">
+                  <Info className="w-5 h-5" />
                 </div>
                 <div>
-                  <label className="form-label">Redis URL</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    placeholder="redis://localhost:6379/0"
-                  />
-                </div>
-                <div className="flex justify-end pt-4 border-t border-gray-200">
-                  <button className="btn-primary">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Settings
-                  </button>
+                  <h4 className="font-bold text-yellow-500">Provider Information</h4>
+                  <p className="text-sm text-slate-400 mt-1">Make sure you have valid API keys for cloud providers. Local providers require the engine to be running.</p>
                 </div>
               </div>
             </div>
-          )}
+          </>
+        )}
 
-          {activeTab === 'notifications' && (
-            <div className="card">
-              <div className="card-header">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Notification Settings
-                </h2>
+        {/* Database, Notifications, Security tabs follow the same dark mode standard */}
+        {activeTab === 'database' && (
+          <div className="rounded-xl border border-royal-green-600 bg-royal-green-800 p-6 lg:p-8">
+            <h2 className="text-lg font-bold mb-6 text-slate-100 flex items-center gap-2">
+              <Database className="w-5 h-5 text-primary" />
+              Database Configuration
+            </h2>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">Database URL</label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                  placeholder="postgresql://user:pass@localhost:5432/dbname"
+                />
               </div>
-              <div className="card-body space-y-4">
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">Redis URL</label>
+                <input
+                  type="text"
+                  className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                  placeholder="redis://localhost:6379/0"
+                />
+              </div>
+              <div className="flex justify-start pt-4 border-t border-royal-green-600">
+                <button className="flex items-center justify-center gap-2 rounded-lg bg-primary px-8 py-3 font-bold text-white transition-all hover:bg-primary/90 active:scale-95">
+                  <Save className="w-5 h-5" />
+                  Save Settings
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'notifications' && (
+          <div className="rounded-xl border border-royal-green-600 bg-royal-green-800 p-6 lg:p-8">
+            <h2 className="text-lg font-bold mb-6 text-slate-100 flex items-center gap-2">
+              <Bell className="w-5 h-5 text-primary" />
+              Notification Settings
+            </h2>
+            <div className="space-y-6">
+              {/* Email */}
+              <div className="flex flex-col space-y-4">
+                <div className="flex items-center justify-between p-4 bg-royal-green-900 rounded-lg border border-royal-green-600">
                   <div className="flex items-center space-x-3">
-                    <Mail className="w-5 h-5 text-gray-400" />
+                    <Mail className="w-5 h-5 text-slate-400" />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        Email Notifications
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Receive email alerts for validation failures
-                      </p>
+                      <p className="text-sm font-medium text-slate-100">Email Notifications</p>
+                      <p className="text-xs text-slate-400">Receive email alerts for validation failures</p>
                     </div>
                   </div>
-                  <input
-                    type="checkbox"
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
+                  <input type="checkbox" className="w-4 h-4 rounded border-royal-green-600 bg-royal-green-800 text-primary focus:ring-primary focus:ring-offset-royal-green-900 accent-primary" />
                 </div>
-
-                <div>
-                  <label className="form-label">Email Recipients</label>
+                <div className="space-y-2 pl-2">
+                  <label className="text-sm font-medium text-slate-300">Email Recipients</label>
                   <input
                     type="text"
-                    className="form-input"
+                    className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                     placeholder="admin@example.com, team@example.com"
                   />
                 </div>
+              </div>
 
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              {/* Slack */}
+              <div className="flex flex-col space-y-4 pt-4 border-t border-royal-green-600">
+                <div className="flex items-center justify-between p-4 bg-royal-green-900 rounded-lg border border-royal-green-600">
                   <div className="flex items-center space-x-3">
-                    <Bell className="w-5 h-5 text-gray-400" />
+                    <Bell className="w-5 h-5 text-slate-400" />
                     <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        Slack Notifications
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Send alerts to Slack channel
-                      </p>
+                      <p className="text-sm font-medium text-slate-100">Slack Notifications</p>
+                      <p className="text-xs text-slate-400">Send alerts to Slack channel</p>
                     </div>
                   </div>
-                  <input
-                    type="checkbox"
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
+                  <input type="checkbox" className="w-4 h-4 rounded border-royal-green-600 bg-royal-green-800 text-primary focus:ring-primary focus:ring-offset-royal-green-900 accent-primary" />
                 </div>
-
-                <div>
-                  <label className="form-label">Slack Webhook URL</label>
+                <div className="space-y-2 pl-2">
+                  <label className="text-sm font-medium text-slate-300">Slack Webhook URL</label>
                   <input
                     type="text"
-                    className="form-input"
+                    className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                     placeholder="https://hooks.slack.com/services/..."
                   />
                 </div>
+              </div>
 
-                <div className="flex justify-end pt-4 border-t border-gray-200">
-                  <button className="btn-primary">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Settings
-                  </button>
-                </div>
+              <div className="flex justify-start pt-4 border-t border-royal-green-600">
+                <button className="flex items-center justify-center gap-2 rounded-lg bg-primary px-8 py-3 font-bold text-white transition-all hover:bg-primary/90 active:scale-95">
+                  <Save className="w-5 h-5" />
+                  Save Settings
+                </button>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {activeTab === 'security' && (
-            <div className="card">
-              <div className="card-header">
-                <h2 className="text-lg font-semibold text-gray-900">
-                  Security Settings
-                </h2>
+        {activeTab === 'security' && (
+          <div className="rounded-xl border border-royal-green-600 bg-royal-green-800 p-6 lg:p-8">
+            <h2 className="text-lg font-bold mb-6 text-slate-100 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-primary" />
+              Security Settings
+            </h2>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">Secret Key</label>
+                <input
+                  type="password"
+                  className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                  placeholder="Change secret key for JWT signing"
+                />
               </div>
-              <div className="card-body space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">Access Token Expiry (minutes)</label>
+                <input
+                  type="number"
+                  className="w-full rounded-lg border border-royal-green-600 bg-royal-green-900 px-4 py-2.5 text-slate-100 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                  defaultValue={30}
+                />
+              </div>
+              <div className="flex items-center justify-between p-4 bg-royal-green-900 rounded-lg border border-royal-green-600">
                 <div>
-                  <label className="form-label">Secret Key</label>
-                  <input
-                    type="password"
-                    className="form-input"
-                    placeholder="Change secret key for JWT signing"
-                  />
+                  <p className="text-sm font-medium text-slate-100">Enable CORS</p>
+                  <p className="text-xs text-slate-400">Allow cross-origin requests</p>
                 </div>
-
-                <div>
-                  <label className="form-label">Access Token Expiry (minutes)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    defaultValue={30}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">
-                      Enable CORS
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      Allow cross-origin requests
-                    </p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    defaultChecked
-                    className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  />
-                </div>
-
-                <div className="flex justify-end pt-4 border-t border-gray-200">
-                  <button className="btn-primary">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Settings
-                  </button>
-                </div>
+                <input
+                  type="checkbox"
+                  defaultChecked
+                  className="w-4 h-4 rounded border-royal-green-600 bg-royal-green-800 text-primary focus:ring-primary focus:ring-offset-royal-green-900 accent-primary"
+                />
+              </div>
+              <div className="flex justify-start pt-4 border-t border-royal-green-600">
+                <button className="flex items-center justify-center gap-2 rounded-lg bg-primary px-8 py-3 font-bold text-white transition-all hover:bg-primary/90 active:scale-95">
+                  <Save className="w-5 h-5" />
+                  Save Settings
+                </button>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

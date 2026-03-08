@@ -39,17 +39,13 @@ env/
 .env.local
 .env.*.local
 
-# Database
-*.db
-*.sqlite3
+
 
 # Logs
 *.log
 logs/
 
-# ChromaDB
-chroma_db/
-.chroma/
+
 
 # Node.js
 node_modules/
