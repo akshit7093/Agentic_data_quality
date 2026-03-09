@@ -5,8 +5,9 @@ import logging
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-import chromadb
 from sentence_transformers import SentenceTransformer
+import chromadb
+from chromadb.config import Settings as ChromaSettings
 
 from app.core.config import get_settings
 from app.agents.llm_service import get_llm_service
@@ -31,25 +32,27 @@ class RAGService:
         
         try:
             # Initialize ChromaDB
+            logger.info(f"Connecting to ChromaDB at {self.settings.VECTOR_DB_PATH}...")
             self._chroma_client = chromadb.PersistentClient(
                 path=self.settings.VECTOR_DB_PATH,
+                settings=ChromaSettings(anonymized_telemetry=False)
             )
             
             # Get or create collection
+            logger.info("Accessing collection 'data_quality_context'...")
             self._collection = self._chroma_client.get_or_create_collection(
                 name="data_quality_context",
                 metadata={"hnsw:space": "cosine"}
             )
             
             # Initialize embedding model
-            if self.settings.EMBEDDING_PROVIDER == "ollama":
-                # Use local sentence transformer for embeddings
-                self._embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
-            else:
-                self._embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+            model_name = 'all-MiniLM-L6-v2'
+            logger.info(f"Loading embedding model: {model_name}...")
+            # Note: This may hang if downloading the model for the first time
+            self._embedding_model = SentenceTransformer(model_name)
             
             self._initialized = True
-            logger.info("RAG service initialized successfully")
+            logger.info("RAG service initialized successfully (telemetry disabled)")
             
         except Exception as e:
             logger.error(f"Failed to initialize RAG service: {str(e)}")

@@ -1,1 +1,5 @@
-invalid type: string " of impressions that resulted in action.\n- **Data Quality Issues**: None.\n\n### `Results` (float)\n- **Null Count**: 68\n- **Unique Values**: 1000\n- **Min / Max / Avg**: Not applicable.\n- **Top Sample Values**: 96961.62, 68504.06.\n- **Detected Pattern / Format**: Currency in INR with two decimal places.\nmay need validation.\n\n### `supplier_id` (INTEGER)\nÿÿÿÿÿÿÿÿÿÿÿÿ
+invalid type: string "le for the product.\n- **Data Quality Issues**:\n  - ðŸ”´ None detected beyond expected positive values.\n\n### `supplier_id` (INTEGER)\n- **Null Count**: 0 (0%)\n- **Unique Values**: 49\n- **Min / Max / Avg**: Min: 6, Max: 48, Avg: ~22.5\n- **Top Sample Values**: 33, 9, 15\n- **Detected Pattern / Format**: Numeric identifiers for suppliers.\ne)
+
+Sample Data (10 rows):
+[
+  {

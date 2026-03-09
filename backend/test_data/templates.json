@@ -1,0 +1,481 @@
+{
+  "ae5de063-1d49-4c3f-bdf9-8a2092af076c": {
+    "id": "ae5de063-1d49-4c3f-bdf9-8a2092af076c",
+    "name": "Customers",
+    "description": "Standard customer master table \u2014 1 000 rows, 10 columns",
+    "columns": [
+      {
+        "name": "customer_id",
+        "dtype_hint": "int",
+        "description": "Unique customer identifier",
+        "required": true,
+        "aliases": [
+          "cust_id",
+          "id",
+          "customerid",
+          "client_id"
+        ]
+      },
+      {
+        "name": "email",
+        "dtype_hint": "str",
+        "description": "Customer email address",
+        "required": true,
+        "aliases": [
+          "email_address",
+          "mail",
+          "e_mail"
+        ]
+      },
+      {
+        "name": "first_name",
+        "dtype_hint": "str",
+        "description": "Customer first / given name",
+        "required": true,
+        "aliases": [
+          "fname",
+          "given_name",
+          "firstname",
+          "forename"
+        ]
+      },
+      {
+        "name": "last_name",
+        "dtype_hint": "str",
+        "description": "Customer family / last name",
+        "required": true,
+        "aliases": [
+          "lname",
+          "surname",
+          "lastname",
+          "family_name"
+        ]
+      },
+      {
+        "name": "phone",
+        "dtype_hint": "str",
+        "description": "Contact phone number",
+        "required": false,
+        "aliases": [
+          "phone_number",
+          "telephone",
+          "mobile"
+        ]
+      },
+      {
+        "name": "date_of_birth",
+        "dtype_hint": "datetime",
+        "description": "Customer date of birth",
+        "required": false,
+        "aliases": [
+          "dob",
+          "birthdate",
+          "birth_date",
+          "birthday"
+        ]
+      },
+      {
+        "name": "country",
+        "dtype_hint": "str",
+        "description": "Country of residence",
+        "required": false,
+        "aliases": [
+          "country_code",
+          "nation",
+          "region"
+        ]
+      },
+      {
+        "name": "created_at",
+        "dtype_hint": "datetime",
+        "description": "Account creation timestamp (UTC)",
+        "required": false,
+        "aliases": [
+          "created_date",
+          "signup_date",
+          "registration_date"
+        ]
+      },
+      {
+        "name": "status",
+        "dtype_hint": "str",
+        "description": "Account status (active / inactive / suspended)",
+        "required": false,
+        "aliases": [
+          "account_status",
+          "state",
+          "active"
+        ]
+      },
+      {
+        "name": "lifetime_value",
+        "dtype_hint": "float",
+        "description": "Total lifetime revenue (USD)",
+        "required": false,
+        "aliases": [
+          "ltv",
+          "clv",
+          "total_spend",
+          "lifetime_revenue"
+        ]
+      }
+    ],
+    "name_similarity_min": 0.65,
+    "dtype_match_required": false,
+    "created_at": "2026-03-09T19:47:29.781512+00:00",
+    "updated_at": "2026-03-09T19:47:29.781512+00:00",
+    "is_active": true
+  },
+  "9fa0320b-576f-4c7e-9f9f-3ae8b94bfbb1": {
+    "id": "9fa0320b-576f-4c7e-9f9f-3ae8b94bfbb1",
+    "name": "Orders",
+    "description": "Standard orders / line-items table \u2014 5 000 rows, 10 columns",
+    "columns": [
+      {
+        "name": "order_id",
+        "dtype_hint": "int",
+        "description": "Unique order identifier",
+        "required": true,
+        "aliases": [
+          "id",
+          "orderid",
+          "order_number",
+          "order_ref"
+        ]
+      },
+      {
+        "name": "customer_id",
+        "dtype_hint": "int",
+        "description": "FK \u2192 customers.customer_id",
+        "required": true,
+        "aliases": [
+          "cust_id",
+          "customerid",
+          "buyer_id"
+        ]
+      },
+      {
+        "name": "product_id",
+        "dtype_hint": "int",
+        "description": "FK \u2192 products.product_id",
+        "required": true,
+        "aliases": [
+          "productid",
+          "item_id",
+          "sku_id",
+          "sku"
+        ]
+      },
+      {
+        "name": "quantity",
+        "dtype_hint": "int",
+        "description": "Number of units ordered",
+        "required": true,
+        "aliases": [
+          "qty",
+          "units",
+          "num_units"
+        ]
+      },
+      {
+        "name": "unit_price",
+        "dtype_hint": "float",
+        "description": "Price per unit at time of order (USD)",
+        "required": true,
+        "aliases": [
+          "price",
+          "unit_cost",
+          "item_price"
+        ]
+      },
+      {
+        "name": "total_amount",
+        "dtype_hint": "float",
+        "description": "Line total = quantity \u00d7 unit_price",
+        "required": true,
+        "aliases": [
+          "total",
+          "line_total",
+          "order_total",
+          "subtotal"
+        ]
+      },
+      {
+        "name": "order_date",
+        "dtype_hint": "datetime",
+        "description": "Order placement timestamp (UTC)",
+        "required": true,
+        "aliases": [
+          "date",
+          "placed_at",
+          "created_at",
+          "purchase_date"
+        ]
+      },
+      {
+        "name": "shipping_address",
+        "dtype_hint": "str",
+        "description": "Full delivery address (free-text)",
+        "required": false,
+        "aliases": [
+          "address",
+          "delivery_address",
+          "ship_to"
+        ]
+      },
+      {
+        "name": "status",
+        "dtype_hint": "str",
+        "description": "Order status (pending / shipped / delivered)",
+        "required": false,
+        "aliases": [
+          "order_status",
+          "state",
+          "fulfillment_status"
+        ]
+      },
+      {
+        "name": "discount_code",
+        "dtype_hint": "str",
+        "description": "Promotional / coupon code applied",
+        "required": false,
+        "aliases": [
+          "coupon",
+          "promo_code",
+          "voucher",
+          "coupon_code"
+        ]
+      }
+    ],
+    "name_similarity_min": 0.65,
+    "dtype_match_required": false,
+    "created_at": "2026-03-09T19:47:29.783016+00:00",
+    "updated_at": "2026-03-09T19:47:29.783016+00:00",
+    "is_active": true
+  },
+  "274499d2-b696-4d2b-b1cd-c4f709373c29": {
+    "id": "274499d2-b696-4d2b-b1cd-c4f709373c29",
+    "name": "Products",
+    "description": "Product catalogue table \u2014 200 rows, 9 columns",
+    "columns": [
+      {
+        "name": "product_id",
+        "dtype_hint": "int",
+        "description": "Unique product identifier",
+        "required": true,
+        "aliases": [
+          "id",
+          "productid",
+          "sku",
+          "item_id"
+        ]
+      },
+      {
+        "name": "product_name",
+        "dtype_hint": "str",
+        "description": "Display name of the product",
+        "required": true,
+        "aliases": [
+          "name",
+          "title",
+          "item_name",
+          "product"
+        ]
+      },
+      {
+        "name": "category",
+        "dtype_hint": "str",
+        "description": "Product category / department",
+        "required": false,
+        "aliases": [
+          "cat",
+          "department",
+          "type",
+          "product_category"
+        ]
+      },
+      {
+        "name": "price",
+        "dtype_hint": "float",
+        "description": "Retail selling price (USD)",
+        "required": true,
+        "aliases": [
+          "retail_price",
+          "sale_price",
+          "msrp",
+          "unit_price"
+        ]
+      },
+      {
+        "name": "cost",
+        "dtype_hint": "float",
+        "description": "Wholesale / COGS cost (USD)",
+        "required": false,
+        "aliases": [
+          "cogs",
+          "cost_price",
+          "unit_cost",
+          "wholesale_price"
+        ]
+      },
+      {
+        "name": "stock_quantity",
+        "dtype_hint": "int",
+        "description": "Current inventory on-hand (units)",
+        "required": false,
+        "aliases": [
+          "stock",
+          "inventory",
+          "qty_on_hand",
+          "quantity"
+        ]
+      },
+      {
+        "name": "supplier_id",
+        "dtype_hint": "int",
+        "description": "FK \u2192 suppliers.supplier_id",
+        "required": false,
+        "aliases": [
+          "vendor_id",
+          "supplierid",
+          "manufacturer_id"
+        ]
+      },
+      {
+        "name": "created_at",
+        "dtype_hint": "datetime",
+        "description": "Product listing creation timestamp (UTC)",
+        "required": false,
+        "aliases": [
+          "created_date",
+          "added_at",
+          "date_added"
+        ]
+      },
+      {
+        "name": "is_active",
+        "dtype_hint": "bool",
+        "description": "Whether the product is live / visible",
+        "required": false,
+        "aliases": [
+          "active",
+          "enabled",
+          "published",
+          "is_published"
+        ]
+      }
+    ],
+    "name_similarity_min": 0.65,
+    "dtype_match_required": false,
+    "created_at": "2026-03-09T19:47:29.784022+00:00",
+    "updated_at": "2026-03-09T19:47:29.784022+00:00",
+    "is_active": true
+  },
+  "a93c935b-978a-4c5d-be71-fe8bf1021a08": {
+    "id": "a93c935b-978a-4c5d-be71-fe8bf1021a08",
+    "name": "Sales Transactions",
+    "description": "Payment / transaction ledger \u2014 10 000 rows, 8 columns",
+    "columns": [
+      {
+        "name": "transaction_id",
+        "dtype_hint": "int",
+        "description": "Unique transaction identifier",
+        "required": true,
+        "aliases": [
+          "txn_id",
+          "id",
+          "payment_id",
+          "transactionid"
+        ]
+      },
+      {
+        "name": "order_id",
+        "dtype_hint": "int",
+        "description": "FK \u2192 orders.order_id",
+        "required": true,
+        "aliases": [
+          "orderid",
+          "order_ref",
+          "reference_id"
+        ]
+      },
+      {
+        "name": "payment_method",
+        "dtype_hint": "str",
+        "description": "Payment method used",
+        "required": true,
+        "aliases": [
+          "method",
+          "pay_method",
+          "payment_type",
+          "payment_mode"
+        ]
+      },
+      {
+        "name": "payment_status",
+        "dtype_hint": "str",
+        "description": "Status of the payment",
+        "required": true,
+        "aliases": [
+          "status",
+          "txn_status",
+          "result",
+          "state"
+        ]
+      },
+      {
+        "name": "transaction_amount",
+        "dtype_hint": "float",
+        "description": "Amount charged in transaction currency",
+        "required": true,
+        "aliases": [
+          "amount",
+          "charge",
+          "total",
+          "txn_amount",
+          "value"
+        ]
+      },
+      {
+        "name": "transaction_date",
+        "dtype_hint": "datetime",
+        "description": "UTC timestamp of the transaction",
+        "required": true,
+        "aliases": [
+          "date",
+          "txn_date",
+          "paid_at",
+          "processed_at"
+        ]
+      },
+      {
+        "name": "currency",
+        "dtype_hint": "str",
+        "description": "ISO 4217 currency code (USD / EUR / etc.)",
+        "required": false,
+        "aliases": [
+          "currency_code",
+          "iso_currency",
+          "ccy"
+        ]
+      },
+      {
+        "name": "fraud_score",
+        "dtype_hint": "float",
+        "description": "ML fraud risk score 0.0 \u2013 1.0",
+        "required": false,
+        "aliases": [
+          "risk_score",
+          "fraud_probability",
+          "fraud_risk",
+          "risk"
+        ]
+      }
+    ],
+    "name_similarity_min": 0.65,
+    "dtype_match_required": false,
+    "created_at": "2026-03-09T19:47:29.785020+00:00",
+    "updated_at": "2026-03-09T19:47:29.785020+00:00",
+    "is_active": true
+  }
+}

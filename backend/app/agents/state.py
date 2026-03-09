@@ -45,6 +45,8 @@ class DataSourceInfo:
     full_scan_requested: bool = False
     full_scan_used: bool = False
     slice_filters: Optional[Dict[str, Any]] = None
+    column_mapping: Optional[Dict[str, str]] = None  # original -> target/alias
+    selected_columns: Optional[List[str]] = None
 
 
 @dataclass

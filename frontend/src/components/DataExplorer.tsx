@@ -127,6 +127,9 @@ interface DataExplorerProps {
     discoveryLoading: boolean;
     dataSourceId: string;
     onViewCompleteData?: () => void;
+    // Template session — when set, filter/pivot operate on the virtual restricted dataset
+    templateSessionId?: string | null;
+    templateSessionInfo?: { columns: string[]; row_count: number; templateName: string; rename_map: Record<string, string> } | null;
 }
 
 type SemanticType = 'numeric' | 'categorical' | 'boolean' | 'datetime' | 'text' | 'unknown';
@@ -180,6 +183,8 @@ export default function DataExplorer({
     discoveryLoading,
     dataSourceId,
     onViewCompleteData,
+    templateSessionId,
+    templateSessionInfo,
 }: DataExplorerProps) {
     const [activeTab, setActiveTab] = useState<'columns' | 'filters' | 'pivot'>('columns');
 
@@ -268,6 +273,7 @@ export default function DataExplorer({
                     dimensions: [pivotDimension, ...(pivotDimension2 ? [pivotDimension2] : [])],
                     measures: [{ column: pivotMeasure || '*', aggregation: pivotAgg }],
                     filters: sliceFilters.length > 0 ? sliceFilters : undefined,
+                    template_session_id: templateSessionId || undefined,
                 }),
             });
             const data = await res.json();
@@ -484,6 +490,30 @@ export default function DataExplorer({
                     <BarChart2 className="w-4 h-4 mr-2" /> Pivot Builder
                 </button>
             </div>
+
+            {/* Template session banner */}
+            {templateSessionInfo && (
+                <div className="mx-4 mt-3 flex items-center gap-3 px-4 py-2.5 rounded-xl
+                                bg-emerald-500/10 border border-emerald-500/30 text-xs font-bold">
+                    <span className="text-emerald-400 text-sm">✅</span>
+                    <span className="text-emerald-300 uppercase tracking-widest">Template Active:</span>
+                    <span className="text-slate-300">{templateSessionInfo.templateName}</span>
+                    <span className="text-slate-600">·</span>
+                    <span className="text-slate-400">{templateSessionInfo.columns.length} columns</span>
+                    <span className="text-slate-600">·</span>
+                    <span className="text-slate-400">{templateSessionInfo.row_count?.toLocaleString()} rows</span>
+                    <span className="ml-auto flex gap-1.5 flex-wrap">
+                        {templateSessionInfo.columns.slice(0, 6).map(c => (
+                            <span key={c} className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-mono text-[10px] border border-emerald-500/20">
+                                {c}
+                            </span>
+                        ))}
+                        {templateSessionInfo.columns.length > 6 && (
+                            <span className="text-slate-500 text-[10px]">+{templateSessionInfo.columns.length - 6} more</span>
+                        )}
+                    </span>
+                </div>
+            )}
 
             <div className="p-4">
                 {/* ━━━━━━━━ COLUMNS TAB ━━━━━━━━ */}

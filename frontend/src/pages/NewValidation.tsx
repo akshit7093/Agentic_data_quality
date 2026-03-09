@@ -26,6 +26,8 @@ import { useLLMHealth } from '@/hooks/useSystem';
 import { dataSourceApi, fileApi, ruleGroupApi } from '@/services/api';
 import Modal from '@/components/Modal';
 import DataExplorer from '@/components/DataExplorer';
+import VisualPrep from '@/components/VisualPrep';
+
 
 interface DataResource {
   name: string;
@@ -93,9 +95,12 @@ export default function NewValidation() {
   const submitValidation = useSubmitValidation();
   const { data: llmHealth } = useLLMHealth();
 
-  const [step, setStep] = useState<'source' | 'browse' | 'explore' | 'config' | 'review'>('source');
+  const [step, setStep] = useState<'source' | 'browse' | 'prep' | 'explore' | 'config' | 'review'>('source');
   const [selectedDataSource, setSelectedDataSource] = useState<string>('');
   const [selectedResource, setSelectedResource] = useState<DataResource | null>(null);
+  const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+  const [selectedColumns, setSelectedColumns] = useState<string[]>([]);
+
   const [expandedResources, setExpandedResources] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [validationMode, setValidationMode] = useState('hybrid');
@@ -105,6 +110,10 @@ export default function NewValidation() {
   // Discovery metadata state
   const [discoveryMetadata, setDiscoveryMetadata] = useState<any>(null);
   const [discoveryLoading, setDiscoveryLoading] = useState(false);
+
+  // Template session state (set when user confirms a template mapping in VisualPrep)
+  const [templateSessionId, setTemplateSessionId] = useState<string | null>(null);
+  const [templateSessionInfo, setTemplateSessionInfo] = useState<any>(null);
 
   const [customRules, setCustomRules] = useState<any[]>([]);
   const [newRuleColumn, setNewRuleColumn] = useState('');
@@ -176,18 +185,17 @@ export default function NewValidation() {
   // Auto-discover filters when entering explore step with a selected resource
   useEffect(() => {
     if (step === 'explore' && selectedResource && selectedDataSource && !discoveryMetadata) {
-      loadDiscovery();
+      loadDiscovery(templateSessionId);
     }
   }, [step, selectedResource, selectedDataSource]);
 
-  const loadDiscovery = async () => {
+  const loadDiscovery = async (sessionId?: string | null) => {
     if (!selectedResource || !selectedDataSource) return;
     setDiscoveryLoading(true);
     try {
-      const res = await fetch(
-        `/api/v1/datasources/${selectedDataSource}/discover-filters?resource_path=${encodeURIComponent(selectedResource.path)}`,
-        { method: 'POST' }
-      );
+      const sid = sessionId !== undefined ? sessionId : templateSessionId;
+      const url = `/api/v1/datasources/${selectedDataSource}/discover-filters?resource_path=${encodeURIComponent(selectedResource.path)}${sid ? `&template_session_id=${sid}` : ''}`;
+      const res = await fetch(url, { method: 'POST' });
       if (res.ok) {
         const data = await res.json();
         setDiscoveryMetadata(data);
@@ -243,6 +251,8 @@ export default function NewValidation() {
         validation_mode: validationMode,
         sample_size: sampleSize,
         custom_rules: customRules,
+        column_mapping: columnMapping,
+        selected_columns: selectedColumns,
       };
 
       if (sliceFilters.length > 0) {
@@ -280,18 +290,20 @@ export default function NewValidation() {
   const renderStepIndicator = () => (
     <div className="flex items-center justify-center mb-8">
       {[
-        { id: 'source', label: 'Data Source', icon: Database },
+        { id: 'source', label: 'Source', icon: Database },
         { id: 'browse', label: 'Browse', icon: Folder },
-        { id: 'explore', label: 'Explore & Slice', icon: Table },
+        { id: 'prep', label: 'Prep', icon: Table },
+        { id: 'explore', label: 'Explore', icon: Database },
         { id: 'config', label: 'Configure', icon: Settings },
         { id: 'review', label: 'Review', icon: CheckCircle },
       ].map((s, idx) => {
         const isActive = step === s.id;
         const isCompleted =
           (step === 'browse' && s.id === 'source') ||
-          (step === 'explore' && ['source', 'browse'].includes(s.id)) ||
-          (step === 'config' && ['source', 'browse', 'explore'].includes(s.id)) ||
-          (step === 'review' && ['source', 'browse', 'explore', 'config'].includes(s.id));
+          (step === 'prep' && ['source', 'browse'].includes(s.id)) ||
+          (step === 'explore' && ['source', 'browse', 'prep'].includes(s.id)) ||
+          (step === 'config' && ['source', 'browse', 'prep', 'explore'].includes(s.id)) ||
+          (step === 'review' && ['source', 'browse', 'prep', 'explore', 'config'].includes(s.id));
 
         return (
           <div key={s.id} className="flex items-center">
@@ -304,9 +316,9 @@ export default function NewValidation() {
                 }`}
             >
               <s.icon className="w-5 h-5" />
-              <span className="font-medium">{s.label}</span>
+              <span className="font-medium text-xs">{s.label}</span>
             </div>
-            {idx < 3 && <ChevronRight className="w-5 h-5 text-gray-300 mx-2" />}
+            {idx < 5 && <ChevronRight className="w-5 h-5 text-gray-300 mx-1" />}
           </div>
         );
       })}
@@ -683,7 +695,7 @@ export default function NewValidation() {
             if (selectedResource) {
               loadPreview(selectedResource);
             }
-            setStep('explore');
+            setStep('prep');
           }}
           disabled={!selectedResource}
           className="btn-primary disabled:opacity-50"
@@ -746,6 +758,39 @@ export default function NewValidation() {
     </div>
   );
 
+  const renderPrepStep = () => (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold text-slate-100 uppercase tracking-widest">Visual Data Preparation</h2>
+        <p className="text-slate-400 mt-1">Map your columns to a template or rename them for analysis</p>
+      </div>
+
+      <VisualPrep
+        fileColumns={selectedResource?.columns || []}
+        dataSourceId={selectedDataSource}
+        resourcePath={selectedResource?.path || ''}
+        onComplete={(mapping, selected, sessionId, sessionInfo) => {
+          setColumnMapping(mapping);
+          setSelectedColumns(selected);
+          if (sessionId) {
+            setTemplateSessionId(sessionId);
+            setTemplateSessionInfo(sessionInfo);
+          }
+          // Reset discovery so it re-runs with template session in explore step
+          setDiscoveryMetadata(null);
+          setStep('explore');
+        }}
+      />
+
+      <div className="flex justify-between">
+        <button onClick={() => setStep('browse')} className="btn-secondary">
+          <ChevronLeft className="w-4 h-4 mr-2 inline" />
+          Back
+        </button>
+      </div>
+    </div>
+  );
+
   const renderExploreStep = () => (
     <div className="space-y-6">
       <div>
@@ -762,6 +807,8 @@ export default function NewValidation() {
         discoveryLoading={discoveryLoading}
         dataSourceId={selectedDataSource}
         onViewCompleteData={() => setShowFullDataModal(true)}
+        templateSessionId={templateSessionId}
+        templateSessionInfo={templateSessionInfo}
       />
 
       {/* ── Full Data Viewer Modal ── */}
@@ -1359,6 +1406,7 @@ export default function NewValidation() {
       <div className="max-w-4xl mx-auto">
         {step === 'source' && renderSourceStep()}
         {step === 'browse' && renderBrowseStep()}
+        {step === 'prep' && renderPrepStep()}
         {step === 'explore' && renderExploreStep()}
         {step === 'config' && renderConfigStep()}
         {step === 'review' && renderReviewStep()}

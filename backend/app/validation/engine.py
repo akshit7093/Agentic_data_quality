@@ -24,6 +24,36 @@ class ValidationEngine:
     def __init__(self):
         self.execution_logs = []
     
+    def _apply_prep_transformation(self, df: pd.DataFrame, data_source_info: Any) -> pd.DataFrame:
+        """Apply Phase 6 Prep transformations: Rename and Subset."""
+        if not data_source_info:
+            return df
+            
+        mapping = getattr(data_source_info, 'column_mapping', None)
+        selected = getattr(data_source_info, 'selected_columns', None)
+        
+        # 1. Rename columns
+        if mapping:
+            # Only rename if column exists in mapping
+            # Note: mapping is original -> new
+            df = df.rename(columns=mapping)
+            self.execution_logs.append({
+                "role": "system",
+                "content": f"[Prep] Applied column mapping/renaming: {len(mapping)} columns mapped."
+            })
+            
+        # 2. Filter to selected columns
+        if selected:
+            # Only keep columns that are in 'selected' list AND exist in df
+            existing_selected = [c for c in selected if c in df.columns]
+            df = df[existing_selected]
+            self.execution_logs.append({
+                "role": "system",
+                "content": f"[Prep] Filtered to {len(existing_selected)} selected columns for analysis."
+            })
+            
+        return df
+    
     # ==========================================
     # NEW AGENTIC EXECUTION ENGINE
     # ==========================================
@@ -50,6 +80,9 @@ class ValidationEngine:
             
             # Load the data into a Pandas DataFrame
             df = pd.DataFrame(sample_data)
+            
+            # Apply Phase 6 transformations if any
+            df = self._apply_prep_transformation(df, data_source_info)
             
             # Extract clean table name from path (e.g. 'public.sales' -> 'sales')
             target_path = getattr(data_source_info, 'target_path', 'target_table')
@@ -187,6 +220,9 @@ class ValidationEngine:
         df = None
         if not sql_pushdown_enabled or any(r.rule_type != 'custom_sql' for r in rules):
             df = pd.DataFrame(sample_data)
+            
+            # Apply Phase 6 transformations if any
+            df = self._apply_prep_transformation(df, data_source_info)
             
             # Apply slicing filters to the pandas dataframe if provided
             slice_filters = getattr(data_source_info, 'slice_filters', None) if data_source_info else None

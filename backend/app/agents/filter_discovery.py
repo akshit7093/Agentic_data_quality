@@ -1122,3 +1122,77 @@ class DiscoveryManager:
                 "final_row_count": len(final_df),
             },
         }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TEMPLATE-AWARE DISCOVERY MANAGER
+# ══════════════════════════════════════════════════════════════════════════════
+# When a template session is active the underlying DataFrame is replaced with
+# the virtual restricted / renamed DataFrame produced by TemplateApplier.
+# All filter/pivot operations then see ONLY the template-selected columns.
+
+import json as _json
+
+
+class TemplateAwareDiscoveryManager(DiscoveryManager):
+    """
+    Extends DiscoveryManager with template-session support.
+
+    If a session_id is provided and a matching applied session exists,
+    `discover()` and `apply_selections()` automatically operate on the
+    virtual restricted DataFrame (only template-matched columns, renamed).
+
+    Falls back to the raw DataFrame when no session is active.
+    """
+
+    def _resolve_df(
+        self,
+        df: pd.DataFrame,
+        session_id: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """Return the virtual df if a session is active, else the original."""
+        if not session_id:
+            return df
+        try:
+            from app.agents.template_routes import get_applied_session
+            session = get_applied_session(session_id)
+            if session:
+                virtual_df = pd.read_json(
+                    _json.loads(session["df_json"])
+                    if isinstance(session["df_json"], str)
+                    else session["df_json"],
+                    orient="records",
+                )
+                logger.info(
+                    f"TemplateAwareDiscovery: Using virtual dataset "
+                    f"({len(virtual_df)} rows, {len(virtual_df.columns)} cols) "
+                    f"from session {session_id}"
+                )
+                return virtual_df
+        except Exception as e:
+            logger.warning(f"TemplateAwareDiscovery: Could not load session df: {e}")
+        return df
+
+    async def discover(  # type: ignore[override]
+        self,
+        df: pd.DataFrame,
+        dataset_id: str,
+        dataset_name: str,
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        resolved = self._resolve_df(df, session_id)
+        result = await super().discover(resolved, dataset_id, dataset_name)
+        if session_id:
+            result["template_session_active"] = True
+            result["virtual_columns"] = list(resolved.columns)
+        return result
+
+    def apply_selections(  # type: ignore[override]
+        self,
+        df: pd.DataFrame,
+        filter_selections: List[UserFilterSelection],
+        pivot_selection: Optional[UserPivotSelection] = None,
+        session_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        resolved = self._resolve_df(df, session_id)
+        return super().apply_selections(resolved, filter_selections, pivot_selection)

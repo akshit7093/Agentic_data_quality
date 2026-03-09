@@ -141,9 +141,10 @@ class ColumnAnalysisAgent:
 
     async def analyze(self, table_name: str) -> ColumnQualityReport:
         lang = "Pandas" if self.use_pandas else "SQL"
+        print(f"\n[DEBUG] ColumnAnalysisAgent.analyze: column='{self.column_name}' mode={self.mode} lang={lang}")
         logger.info(f"Deep-dive: column='{self.column_name}' mode={self.mode} lang={lang}")
         await self._generate_rules(table_name)
-        await self._execute_rules()
+        await self._execute_rules(table_name)
         return await self._evaluate_results()
 
     # ── Stage 1: Rule Generation ─────────────────────────────────
@@ -600,6 +601,9 @@ ALREADY EXECUTED (DO NOT DUPLICATE):
 {existing_list}
 
 {THINK_VERIFY_TEMPLATE}"""
+
+        print(f"\n[DEBUG] BatchColumnAnalysisAgent.analyze")
+        print(f"[DEBUG] columns in schema_data: {list(self.schema_data.keys())}")
 
         schema_dump = json.dumps({
             col: {"type": info["dtype"], "samples": info["samples"][:10]}

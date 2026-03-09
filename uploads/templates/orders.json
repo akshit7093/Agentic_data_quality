@@ -1,0 +1,57 @@
+{
+    "id": "orders",
+    "name": "Orders",
+    "description": "Standard e-commerce order schema.",
+    "columns": [
+        {
+            "name": "order_id",
+            "type": "INTEGER",
+            "description": "Primary Key"
+        },
+        {
+            "name": "customer_id",
+            "type": "INTEGER",
+            "description": "Foreign Key to Customers"
+        },
+        {
+            "name": "product_id",
+            "type": "INTEGER",
+            "description": "Foreign Key to Products"
+        },
+        {
+            "name": "quantity",
+            "type": "INTEGER",
+            "description": "Order quantity"
+        },
+        {
+            "name": "unit_price",
+            "type": "REAL",
+            "description": "Price per unit"
+        },
+        {
+            "name": "total_amount",
+            "type": "REAL",
+            "description": "Total order value"
+        },
+        {
+            "name": "order_date",
+            "type": "TIMESTAMP",
+            "description": "Time of order"
+        },
+        {
+            "name": "shipping_address",
+            "type": "TEXT",
+            "description": "Delivery address"
+        },
+        {
+            "name": "status",
+            "type": "TEXT",
+            "description": "Order status (Pending, Shipped, etc.)"
+        },
+        {
+            "name": "discount_code",
+            "type": "TEXT",
+            "description": "Applied promo code"
+        }
+    ]
+}

@@ -1,0 +1,47 @@
+{
+    "id": "sales_transactions",
+    "name": "Sales Transactions",
+    "description": "High-volume sales transaction logging.",
+    "columns": [
+        {
+            "name": "transaction_id",
+            "type": "INTEGER",
+            "description": "Primary Key"
+        },
+        {
+            "name": "order_id",
+            "type": "INTEGER",
+            "description": "Order reference"
+        },
+        {
+            "name": "payment_method",
+            "type": "TEXT",
+            "description": "Payment gateway/method"
+        },
+        {
+            "name": "payment_status",
+            "type": "TEXT",
+            "description": "Status of payment"
+        },
+        {
+            "name": "transaction_amount",
+            "type": "REAL",
+            "description": "Amount processed"
+        },
+        {
+            "name": "transaction_date",
+            "type": "TIMESTAMP",
+            "description": "Time of transaction"
+        },
+        {
+            "name": "currency",
+            "type": "TEXT",
+            "description": "Transaction currency"
+        },
+        {
+            "name": "fraud_score",
+            "type": "REAL",
+            "description": "AI-generated fraud risk score"
+        }
+    ]
+}

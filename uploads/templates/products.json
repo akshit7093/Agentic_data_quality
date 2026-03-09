@@ -1,0 +1,52 @@
+{
+    "id": "products",
+    "name": "Products",
+    "description": "Product catalog schema.",
+    "columns": [
+        {
+            "name": "product_id",
+            "type": "INTEGER",
+            "description": "Primary Key"
+        },
+        {
+            "name": "product_name",
+            "type": "TEXT",
+            "description": "Name of product"
+        },
+        {
+            "name": "category",
+            "type": "TEXT",
+            "description": "Product category"
+        },
+        {
+            "name": "price",
+            "type": "REAL",
+            "description": "Current selling price"
+        },
+        {
+            "name": "cost",
+            "type": "REAL",
+            "description": "Acquisition cost"
+        },
+        {
+            "name": "stock_quantity",
+            "type": "INTEGER",
+            "description": "Current inventory count"
+        },
+        {
+            "name": "supplier_id",
+            "type": "INTEGER",
+            "description": "Supplier identifier"
+        },
+        {
+            "name": "created_at",
+            "type": "TIMESTAMP",
+            "description": "Time added to catalog"
+        },
+        {
+            "name": "is_active",
+            "type": "BOOLEAN",
+            "description": "Availability status"
+        }
+    ]
+}

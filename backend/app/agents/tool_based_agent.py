@@ -148,8 +148,8 @@ TABLE_TOOLS = {
     },
     "table_duplicate_scan": {
         "name": "Find Duplicate Rows",
-        "description": "Find rows that are completely duplicate across all columns",
-        "command": "SELECT *, COUNT(*) AS dup_count FROM {table} GROUP BY {all_columns} HAVING COUNT(*) > 1",
+        "description": "Find rows that are completely duplicate across specified columns",
+        "command": "SELECT {all_columns}, COUNT(*) AS dup_count FROM {table} GROUP BY {all_columns} HAVING COUNT(*) > 1",
         "category": "table_overview",
         "priority": 3,
         "parameters": [],
@@ -157,7 +157,7 @@ TABLE_TOOLS = {
     "table_sample_rows": {
         "name": "Get Sample Rows",
         "description": "Return first 10 rows for manual inspection",
-        "command": "SELECT * FROM {table} LIMIT 10",
+        "command": "SELECT {all_columns} FROM {table} LIMIT 10",
         "category": "table_overview",
         "priority": 4,
         "parameters": [],
@@ -189,7 +189,7 @@ TABLE_TOOLS = {
     "table_random_sample": {
         "name": "Random Sample Rows",
         "description": "Return 10 random rows for unbiased inspection",
-        "command": "SELECT * FROM {table} ORDER BY RANDOM() LIMIT 10",
+        "command": "SELECT {all_columns} FROM {table} ORDER BY RANDOM() LIMIT 10",
         "category": "table_overview",
         "priority": 8,
         "parameters": [],
@@ -1317,9 +1317,11 @@ COLUMN_TOOLS = {
 class ValidationToolExecutor:
     """Executes pre-built validation tools and returns structured results."""
 
-    def __init__(self, connector, table_name: str):
+    def __init__(self, connector, table_name: str, selected_columns: Optional[List[str]] = None):
         self.connector = connector
         self.table_name = table_name
+        self.selected_columns = selected_columns
+        print(f"[DEBUG] ValidationToolExecutor init: table={table_name}, selected_columns={selected_columns}")
 
     async def execute_tool(self, tool_id: str, column: str = None, **kwargs) -> ToolResult:
         """Execute a single validation tool — checks UNIVERSAL, TABLE, and COLUMN tools."""
@@ -1359,10 +1361,16 @@ class ValidationToolExecutor:
 
         # ── Build command by substituting placeholders ────────────────
         command = tool_def["command"]
-        # Wrap identifiers in double quotes to handle spaces/keywords
-        command = command.replace("{table}", f'"{self.table_name}"')
+        
+        # Helper to wrap identifiers in double quotes
+        def q(name):
+            if not name: return name
+            safe_name = str(name).replace('"', '""')
+            return f'"{safe_name}"'
+
+        command = command.replace("{table}", q(self.table_name))
         if column:
-            command = command.replace("{column}", f'"{column}"')
+            command = command.replace("{column}", q(column))
 
         if "{max_length}" in command:
             command = command.replace("{max_length}", str(kwargs.get("max_length", 255)))
@@ -1375,15 +1383,26 @@ class ValidationToolExecutor:
             values = kwargs.get("deprecated_values", [])
             command = command.replace("{deprecated_values}", ", ".join(f"'{v}'" for v in values))
         if "{all_columns}" in command:
-            schema = await self.connector.get_schema(self.table_name)
-            if isinstance(schema, dict):
-                all_cols = list(schema.get("columns", {}).keys())
+            # Use provided selected_columns if available, otherwise fetch from schema
+            if self.selected_columns:
+                all_cols = self.selected_columns
+                print(f"[DEBUG] execute_tool: Using selected_columns for {{all_columns}}: {all_cols}")
             else:
-                all_cols = [c.get("name") for c in schema if isinstance(c, dict)]
-            command = command.replace("{all_columns}", ", ".join(f'"{c}"' for c in all_cols))
+                schema = await self.connector.get_schema(self.table_name)
+                if isinstance(schema, dict):
+                    all_cols = list(schema.get("columns", {}).keys())
+                else:
+                    all_cols = [c.get("name") for c in schema if isinstance(c, dict)]
+                print(f"[DEBUG] execute_tool: No selected_columns, fetched {len(all_cols)} from schema")
+            
+            expanded = ", ".join(q(c) for c in all_cols)
+            print(f"[DEBUG] execute_tool: Placeholder {{all_columns}} -> {expanded}")
+            command = command.replace("{all_columns}", expanded)
+        
+        print(f"[DEBUG] execute_tool: Final SQL -> {command.strip()}")
         if "{columns}" in command:
             cols = kwargs.get("columns", [])
-            command = command.replace("{columns}", ", ".join(f'"{c}"' for c in cols))
+            command = command.replace("{columns}", ", ".join(q(c) for c in cols))
 
         # Skip if required parameters are still unresolved
         if "{expected_values}" in command or "{deprecated_values}" in command:

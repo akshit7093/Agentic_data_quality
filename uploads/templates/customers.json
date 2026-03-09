@@ -1,0 +1,57 @@
+{
+    "id": "customers",
+    "name": "Customers",
+    "description": "Enterprise customer master data schema.",
+    "columns": [
+        {
+            "name": "customer_id",
+            "type": "INTEGER",
+            "description": "Primary Key"
+        },
+        {
+            "name": "email",
+            "type": "TEXT",
+            "description": "Email address"
+        },
+        {
+            "name": "first_name",
+            "type": "TEXT",
+            "description": "First name"
+        },
+        {
+            "name": "last_name",
+            "type": "TEXT",
+            "description": "Last name"
+        },
+        {
+            "name": "phone",
+            "type": "TEXT",
+            "description": "Phone number"
+        },
+        {
+            "name": "date_of_birth",
+            "type": "DATE",
+            "description": "Date of birth"
+        },
+        {
+            "name": "country",
+            "type": "TEXT",
+            "description": "Country of origin"
+        },
+        {
+            "name": "created_at",
+            "type": "TIMESTAMP",
+            "description": "Registration time"
+        },
+        {
+            "name": "status",
+            "type": "TEXT",
+            "description": "Account status"
+        },
+        {
+            "name": "lifetime_value",
+            "type": "REAL",
+            "description": "Calculated LTV"
+        }
+    ]
+}

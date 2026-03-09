@@ -1,4 +1,9 @@
 """Main FastAPI application."""
+
+from app.agents.template_seed import seed_builtin_templates
+
+
+
 import logging
 import asyncio
 from contextlib import asynccontextmanager
@@ -10,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import get_settings
 from app.api.routes import router as api_router
 from app.api.rule_routes import router as rule_router
+from app.agents.template_routes import router as template_router
 
 # Configure logging
 logging.basicConfig(
@@ -20,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
@@ -29,6 +34,13 @@ async def lifespan(app: FastAPI):
     logger.info(f"LLM Provider: {settings.LLM_PROVIDER}")
     logger.info(f"API running on {settings.HOST}:{settings.PORT}")
     
+    # Seed templates
+    try:
+        await seed_builtin_templates()
+        logger.info("Built-in templates seeded")
+    except Exception as e:
+        logger.warning(f"Template seeding failed: {str(e)}")
+
     # Initialize services
     try:
         from app.agents.rag_service import get_rag_service
@@ -69,6 +81,7 @@ app.add_middleware(
 # Include API routes
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 app.include_router(rule_router)  # Rule groups API (self-prefixed /api/v1/rules)
+app.include_router(template_router) # Templates API (/api/v1/templates)
 
 # Static files for reports
 import os

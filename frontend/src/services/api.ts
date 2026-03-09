@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { DataSource, ValidationRule, ValidationRun, LLMHealth } from '@/types';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = '/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -69,6 +69,14 @@ export const systemApi = {
   updateSettings: (data: any) => api.post('/settings', data).then(r => r.data),
 };
 
+// Templates
+export const templateApi = {
+  getAll: () => api.get('/templates').then(r => r.data),
+  getById: (id: string) => api.get(`/templates/${id}`).then(r => r.data),
+  save: (data: any) => api.post('/templates', data).then(r => r.data),
+  delete: (id: string) => api.delete(`/templates/${id}`).then(r => r.data),
+};
+
 // File Upload
 export const fileApi = {
   upload: (file: File) => {
@@ -81,7 +89,7 @@ export const fileApi = {
 };
 
 // Rule Groups — self-prefixed routes at /api/v1/rules
-const rulesBase = 'http://localhost:8000/api/v1/rules';
+const rulesBase = '/api/v1/rules';
 export const ruleGroupApi = {
   // Groups
   listGroups: () =>

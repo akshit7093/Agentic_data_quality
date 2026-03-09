@@ -23,6 +23,8 @@ from app.agents.llm_service import get_llm_service
 from app.agents.rag_service import get_rag_service
 from app.connectors.factory import ConnectorFactory
 from app.agents.ticketing_agent import TicketingAgent
+from app.agents.template_routes import get_applied_session
+from app.models.rule_groups import get_rule_group_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -162,6 +164,8 @@ class ValidationRequest(BaseModel):
     full_scan: bool = False
     execution_config: Optional[Dict[str, Any]] = {}
     slice_filters: Optional[Dict[str, Any]] = None  # Key-value pairs for pivot-like slicing
+    session_id: Optional[str] = None  # NEW: applied template session
+    column_mapping: Optional[Dict[str, str]] = None  # NEW: explicit column mapping
 
 
 class ValidationResponse(BaseModel):
@@ -480,17 +484,40 @@ async def run_validation(validation_id: str, request: ValidationRequest):
         _validation_store[validation_id]["status"] = "running"
         source = _get_source(request.data_source_id)
 
+        # ── Resolve selected columns from applied template session ─────────
+        selected_cols: Optional[List[str]] = None
+        column_mapping: Dict[str, str] = dict(request.column_mapping or {})
+
+        if request.session_id:
+            session = get_applied_session(request.session_id)
+            if session:
+                selected_cols = session.get("columns") or None
+                if session.get("rename_map"):
+                    column_mapping.update(session["rename_map"])
+                logger.info(
+                    f"Template session '{request.session_id}': "
+                    f"restricting to {len(selected_cols or [])} columns — {selected_cols}"
+                )
+            else:
+                logger.warning(
+                    f"session_id '{request.session_id}' not found in session store "
+                    "(expired or invalid). Falling back to all columns."
+                )
+
         data_source_info = DataSourceInfo(
             source_type=source["source_type"],
             connection_config=source["connection_config"],
             target_path=request.target_path,
             full_scan_requested=request.full_scan,
             slice_filters=request.slice_filters,
+            selected_columns=selected_cols,
+            column_mapping=column_mapping,
         )
 
-        custom_rules = []
-        for rule in request.custom_rules or []:
-            custom_rules.append(AgentValidationRule(
+        # ── Build custom rules ─────────────────────────────────────────────
+        # 1. Rules supplied directly in the request body
+        custom_rules = [
+            AgentValidationRule(
                 id=str(uuid.uuid4()),
                 name=rule.name,
                 rule_type=rule.rule_type,
@@ -498,10 +525,38 @@ async def run_validation(validation_id: str, request: ValidationRequest):
                 target_columns=rule.target_columns,
                 config=rule.rule_config,
                 expression=rule.expression,
-            ))
+            )
+            for rule in (request.custom_rules or [])
+        ]
+
+        # 2. Rules from saved rule groups that target this file
+        try:
+            rule_store = get_rule_group_store()
+            group_rules = rule_store.get_rules_for_file(request.target_path)
+            if group_rules:
+                logger.info(
+                    f"Loaded {len(group_rules)} rule(s) from rule groups "
+                    f"for target '{request.target_path}'"
+                )
+            for gr in group_rules:
+                custom_rules.append(
+                    AgentValidationRule(
+                        id=gr.get("id", str(uuid.uuid4())),
+                        name=gr.get("rule_name", "group_rule"),
+                        rule_type=gr.get("rule_type", "custom_sql"),
+                        severity=gr.get("severity", "warning"),
+                        target_columns=gr.get("target_columns", []),
+                        config={},
+                        query=gr.get("query", ""),
+                        query_type=gr.get("query_type", "sql"),
+                    )
+                )
+        except Exception as rg_err:
+            # Rule group loading is non-critical — log and continue
+            logger.warning(f"Failed to load rule groups (non-critical): {rg_err}")
 
         validation_mode_enum = ValidationMode(request.validation_mode.lower())
-        
+
         if validation_mode_enum == ValidationMode.SCHEMA_ONLY:
             from app.agents.schema_agent import SchemaValidationAgent
             agent = SchemaValidationAgent()
@@ -510,7 +565,7 @@ async def run_validation(validation_id: str, request: ValidationRequest):
             agent = BusinessAnalystAgent()
         else:
             agent = get_data_quality_agent()
-            
+
         result = await agent.run(
             validation_id=validation_id,
             validation_mode=validation_mode_enum,
@@ -1292,6 +1347,8 @@ class ApplyFiltersRequest(BaseModel):
     """Apply structured filters to a data source."""
     resource_path: str
     filters: List[FilterSelectionItem]
+    # Optional: use a template-applied virtual dataset instead of raw file
+    template_session_id: Optional[str] = None
 
 
 class ApplyPivotRequest(BaseModel):
@@ -1300,32 +1357,69 @@ class ApplyPivotRequest(BaseModel):
     dimensions: List[str]
     measures: List[Dict[str, str]]  # [{"column": "x", "aggregation": "sum"}]
     filters: Optional[List[FilterSelectionItem]] = None
+    # Optional: use a template-applied virtual dataset instead of raw file
+    template_session_id: Optional[str] = None
+
+
+def _load_df_for_request(
+    source: Dict[str, Any],
+    resource_path: str,
+    template_session_id: Optional[str],
+    sample_size: int = 50000,
+) -> "pd.DataFrame":
+    """
+    Synchronous helper used inside async route handlers.
+    Returns the virtual df (when a template session is active) OR schedules
+    a data load.  NOTE: callers must await the connector themselves; this
+    function is a *sync* helper that only resolves session data.
+    Returns None if the session path should be used, and the session dict.
+    """
+    if template_session_id:
+        try:
+            from app.agents.template_routes import get_applied_session
+            session = get_applied_session(template_session_id)
+            if session:
+                import pandas as pd, json as _json
+                raw = session["df_json"]
+                records = _json.loads(raw) if isinstance(raw, str) else raw
+                return pd.DataFrame(records)
+        except Exception as e:
+            logger.warning(f"Template session load failed, falling back to raw data: {e}")
+    return None   # caller should load from connector
 
 
 @router.post("/datasources/{source_id}/discover-filters")
 async def discover_filters(
     source_id: str,
     resource_path: str = Query(...),
+    template_session_id: Optional[str] = Query(default=None),
 ):
-    """Run filter & pivot discovery agents on a data source resource."""
+    """
+    Run filter & pivot discovery agents on a data source resource.
+    When template_session_id is provided, discovery runs on the virtual
+    restricted dataset produced by a prior template-apply step.
+    """
     source = _get_source(source_id)
     try:
         import pandas as pd
-        from app.agents.filter_discovery import DiscoveryManager
+        from app.agents.filter_discovery import TemplateAwareDiscoveryManager
         from app.agents.chart_engine import ChartEngine
 
-        connector = ConnectorFactory.create_connector(
-            source["source_type"], source["connection_config"]
-        )
-        await connector.connect()
-        rows = await connector.sample_data(resource_path, sample_size=50000, method="first")
-        await connector.disconnect()
+        # ── resolve dataframe ─────────────────────────────────────────────
+        df = _load_df_for_request(source, resource_path, template_session_id)
+        if df is None:
+            connector = ConnectorFactory.create_connector(
+                source["source_type"], source["connection_config"]
+            )
+            await connector.connect()
+            rows = await connector.sample_data(resource_path, sample_size=50000, method="first")
+            await connector.disconnect()
+            df = pd.DataFrame(rows)
 
-        df = pd.DataFrame(rows)
         if df.empty:
             raise HTTPException(status_code=400, detail="No data found for this resource.")
 
-        manager = DiscoveryManager()
+        manager = TemplateAwareDiscoveryManager()
         result = await manager.discover(df, source_id, resource_path)
 
         # Generate matplotlib charts
@@ -1341,10 +1435,14 @@ async def discover_filters(
             "columns": chart_engine.generate_profile_charts(df, profiles_raw),
         }
 
+        if template_session_id:
+            result["template_session_id"] = template_session_id
+
         logger.info(
             f"Filter discovery completed for {source_id}/{resource_path}: "
             f"{result['filter_metadata']['dataset']['columns']} columns, "
             f"{len(result['charts']['columns'])} charts"
+            + (f" [template session: {template_session_id}]" if template_session_id else "")
         )
         return result
 
@@ -1357,20 +1455,27 @@ async def discover_filters(
 
 @router.post("/datasources/{source_id}/apply-filters")
 async def apply_filters(source_id: str, request: ApplyFiltersRequest):
-    """Apply structured filters and return filtered data preview."""
+    """
+    Apply structured filters and return filtered data preview.
+    When request.template_session_id is set, filtering is restricted to
+    the virtual template-matched dataset.
+    """
     source = _get_source(source_id)
     try:
         import pandas as pd
         from app.agents.filter_discovery import DynamicFilterExecutor, UserFilterSelection
 
-        connector = ConnectorFactory.create_connector(
-            source["source_type"], source["connection_config"]
-        )
-        await connector.connect()
-        rows = await connector.sample_data(request.resource_path, sample_size=50000, method="first")
-        await connector.disconnect()
+        # ── resolve dataframe ─────────────────────────────────────────────
+        df = _load_df_for_request(source, request.resource_path, request.template_session_id)
+        if df is None:
+            connector = ConnectorFactory.create_connector(
+                source["source_type"], source["connection_config"]
+            )
+            await connector.connect()
+            rows = await connector.sample_data(request.resource_path, sample_size=50000, method="first")
+            await connector.disconnect()
+            df = pd.DataFrame(rows)
 
-        df = pd.DataFrame(rows)
         selections = [
             UserFilterSelection(
                 column=f.column,
@@ -1397,7 +1502,6 @@ async def apply_filters(source_id: str, request: ApplyFiltersRequest):
         except Exception as chart_err:
             logger.warning(f"Filter chart generation failed: {chart_err}")
 
-        # Return preview (first 200 rows) + stats
         preview_rows = filtered_df.head(200).to_dict(orient="records")
         return {
             "total_rows_before": len(df),
@@ -1405,6 +1509,8 @@ async def apply_filters(source_id: str, request: ApplyFiltersRequest):
             "preview_rows": preview_rows,
             "execution_log": log,
             "chart": filter_chart,
+            "template_session_active": bool(request.template_session_id),
+            "available_columns": list(df.columns),
         }
 
     except Exception as e:
@@ -1423,14 +1529,16 @@ async def apply_pivot(source_id: str, request: ApplyPivotRequest):
             UserFilterSelection, UserPivotSelection,
         )
 
-        connector = ConnectorFactory.create_connector(
-            source["source_type"], source["connection_config"]
-        )
-        await connector.connect()
-        rows = await connector.sample_data(request.resource_path, sample_size=50000, method="first")
-        await connector.disconnect()
-
-        df = pd.DataFrame(rows)
+        # ── resolve dataframe (template session or raw) ───────────────────
+        df = _load_df_for_request(source, request.resource_path, request.template_session_id)
+        if df is None:
+            connector = ConnectorFactory.create_connector(
+                source["source_type"], source["connection_config"]
+            )
+            await connector.connect()
+            rows = await connector.sample_data(request.resource_path, sample_size=50000, method="first")
+            await connector.disconnect()
+            df = pd.DataFrame(rows)
 
         # Apply filters first (if any)
         if request.filters:
@@ -1474,6 +1582,8 @@ async def apply_pivot(source_id: str, request: ApplyPivotRequest):
             "columns": list(pivoted.columns),
             "rows": pivoted.head(500).to_dict(orient="records"),
             "chart": pivot_chart,
+            "template_session_active": bool(request.template_session_id),
+            "available_columns": list(df.columns),
         }
 
     except Exception as e:

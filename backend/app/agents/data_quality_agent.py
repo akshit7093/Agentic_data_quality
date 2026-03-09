@@ -324,6 +324,32 @@ class DataQualityAgent:
             await connector.connect(resource_path=target)
             schema = await connector.get_schema(target)
 
+            # ── OPTIMIZATION: Filter schema if selected_columns is provided ──
+            selected_columns = getattr(state['data_source_info'], 'selected_columns', None)
+            column_mapping = getattr(state['data_source_info'], 'column_mapping', {}) or {}
+            
+            if selected_columns:
+                logger.info(f"  🎯 Filtering schema to {len(selected_columns)} selected columns (handling aliases)")
+                original_cols = schema.get('columns', {})
+                
+                # Build reverse mapping: alias -> original_name
+                # (so we can find original_name for each selected alias)
+                rev_map = {alias: orig for orig, alias in column_mapping.items()}
+                
+                filtered_cols = {}
+                for col in selected_columns:
+                    # Case 1: selection is an alias
+                    orig_name = rev_map.get(col)
+                    if orig_name and orig_name in original_cols:
+                        filtered_cols[orig_name] = original_cols[orig_name]
+                    # Case 2: selection is an original name
+                    elif col in original_cols:
+                        filtered_cols[col] = original_cols[col]
+                
+                schema['columns'] = filtered_cols
+                schema['column_count'] = len(filtered_cols)
+                print(f"[DEBUG] _setup_connection: Schema filtered to {len(filtered_cols)} columns: {list(filtered_cols.keys())}")
+
             full_scan    = getattr(state['data_source_info'], 'full_scan_requested', False)
             slice_filters = getattr(state['data_source_info'], 'slice_filters', None)
 
@@ -415,16 +441,33 @@ class DataQualityAgent:
             nudge = ""
 
         # Build available tools list for prompt
-        tool_executor = ValidationToolExecutor(None, target_table)
+        # Use provided selected_columns if available
+        selected_columns = state['data_source_info'].selected_columns
+        column_mapping = state['data_source_info'].column_mapping or {}
+        rev_map = {alias: orig for orig, alias in column_mapping.items()}
+        source_cols = []
+        if selected_columns:
+            for c in selected_columns:
+                source_cols.append(rev_map.get(c, c))
+        
+        print(f"\n[DEBUG] _explore_data node")
+        print(f"[DEBUG] selected_columns (raw): {selected_columns}")
+        print(f"[DEBUG] source_cols (original): {source_cols}")
+        
+        tool_executor = ValidationToolExecutor(None, target_table, source_cols)
         table_tools = tool_executor.get_table_tools()
         table_tools_list = "\n".join([
             f"  - {t['tool_id']}: {t['name']} ({t['description']}) [Parameters: {', '.join(t['parameters']) or 'none'}]"
             for t in table_tools
         ])
 
+        scope_note = ""
+        if selected_columns:
+            scope_note = f"\nCOLUMN SCOPE: You MUST only analyze these columns: {', '.join(selected_columns)}\n"
+
         prompt = f"""Table: {target_table}
 Recent history:
-{history}
+{history}{scope_note}
 Step {exploration_steps}/{MAX_EXPLORATION_STEPS}. Output ONE tool selection or your final <METADATA> report.{nudge}
 
 ═══════════════════════════════════════════════════════════════
@@ -467,6 +510,9 @@ AVAILABLE TOOLS:
 
         last_message = state["messages"][-1]["content"]
         last_message = self._sanitize_llm_response(last_message)
+        
+        # Initialize connector for scope safety
+        connector = None
 
         # ── Extract LLM reasoning if present ──
         reasoning_text = ""
@@ -716,6 +762,13 @@ AVAILABLE TOOLS:
         elif action == "execute_query":
             query = action_data.get("query")
             q_type = action_data.get("query_type", "sql")
+            
+            # V8 FIX: Initialize connector for legacy V7 path
+            connector = self._get_connector(
+                state['data_source_info'].source_type,
+                state['data_source_info'].connection_config
+            )
+            await connector.connect(resource_path=target_table)
 
             if not query:
                 return {
@@ -876,10 +929,47 @@ AVAILABLE TOOLS:
             logger.error(f"Schema is not a list after normalization (got {type(schema).__name__}).")
             return {"columns_to_validate": [], "available_column_tools": {}}
 
-        # Build available tools for each column
-        tool_executor = ValidationToolExecutor(None, target_table)
+        # ── Resolve selected columns (set once, used throughout this node) ──
+        # selected_columns contains the *output/renamed* names chosen during
+        # template matching.  column_mapping is original_name → renamed_name.
+        selected_columns: Optional[List[str]] = state['data_source_info'].selected_columns
+        column_mapping: Dict[str, str] = state['data_source_info'].column_mapping or {}
+
+        # Build reverse map: renamed_name → original_name  (for tool executor)
+        rev_map: Dict[str, str] = {alias: orig for orig, alias in column_mapping.items()}
+
+        # Resolve the *original* column names that the SQL tool executor needs
+        source_cols: List[str] = []
+        if selected_columns:
+            for c in selected_columns:
+                source_cols.append(rev_map.get(c, c))  # fall back to name-as-is
+
+        logger.info(
+            f"  Column scope — selected={selected_columns}, "
+            f"source_cols (original names)={source_cols}"
+        )
+
+        tool_executor = ValidationToolExecutor(None, target_table, source_cols)
         columns_to_validate = []
         available_column_tools = {}
+
+        # ── Filter schema to only the selected columns ──
+        # _setup_connection already filtered schema['columns'] dict, but that only
+        # fires when the agent first connects.  We re-filter here defensively so
+        # _prepare_column_validation is always self-consistent regardless of call order.
+        if selected_columns:
+            # Build a lookup set of *original* names that are in scope
+            original_names_in_scope: set = set(source_cols)
+
+            before = len(schema)
+            schema = [
+                c for c in schema
+                if c.get("name") in original_names_in_scope
+            ]
+            logger.info(
+                f"  Schema filtered: {before} → {len(schema)} columns "
+                f"(selected_columns={selected_columns})"
+            )
         
         for column in schema:
             if isinstance(column, dict) and "name" in column:
