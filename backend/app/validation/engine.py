@@ -131,8 +131,14 @@ class ValidationEngine:
                 return {"status": "error", "error": f"Unsupported query_type: {query_type}"}
                 
         except Exception as e:
-            logger.error(f"Agent query execution failed: {str(e)}")
-            return {"status": "error", "error": str(e)}
+            error_msg = str(e)
+            logger.error(f"Agent query execution failed: {error_msg}")
+            return {
+                "status": "error", 
+                "error": error_msg,
+                "query": query,
+                "query_type": query_type
+            }
 
     # ==========================================
     # LEGACY STATIC RULE EXECUTION (For Custom Rules)

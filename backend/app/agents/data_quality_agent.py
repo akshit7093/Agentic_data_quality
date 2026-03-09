@@ -26,6 +26,7 @@ from app.agents.tool_based_agent import (
     ToolResult
 )
 from app.agents.column_analysis_agent import ColumnAnalysisAgent, BatchColumnAnalysisAgent
+from app.agents.healing_service import HealingService
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +177,7 @@ class DataQualityAgent:
 
     def __init__(self):
         self.llm_service = get_llm_service()
+        self.healing_service = HealingService()
         self.graph = self._build_graph()
 
     def _build_graph(self) -> StateGraph:
@@ -619,7 +621,23 @@ AVAILABLE TOOLS:
                 kwargs = {k: v for k, v in sel.items() if k not in ("tool_id", "column", "tool", "id")}
 
                 logger.info(f"Executing tool: {tool_id}" + (f" on column '{column}'" if column else ""))
-                tool_result = await tool_executor.execute_tool(tool_id, column=column, **kwargs)
+                
+                # ── Tool Execution with Healing Loop ──
+                max_healing_attempts = 1 # Lower for main agent to keep it fast
+                tool_result = None
+                
+                for attempt in range(max_healing_attempts + 1):
+                    tool_result = await tool_executor.execute_tool(tool_id, column=column, **kwargs)
+                    
+                    if tool_result.status == "success":
+                        break
+                        
+                    if attempt < max_healing_attempts:
+                        logger.warning(self.healing_service.format_healing_message(attempt + 1, tool_result.message))
+                        # For V8 tools, healing is limited because queries are pre-built.
+                        # We just retry once in case it was a transient/quoting glitch 
+                        # (The ColumnAnalysisAgent has more aggressive healing as it generates SQL).
+                        continue
 
                 # Build concise summary for LLM
                 results_summary.append({
@@ -707,33 +725,61 @@ AVAILABLE TOOLS:
 
             logger.info(f"Legacy SQL execution: {query[:100]}...")
             
-            # Connect and execute directly using execute_raw_query
-            connector = self._get_connector(
-                state['data_source_info'].source_type,
-                state['data_source_info'].connection_config
-            )
-            await connector.connect()
+            # ── V7 Execution with Healing Loop ──
+            max_healing_attempts = 2
+            current_query = query
+            tool_result = None
+
+            for attempt in range(max_healing_attempts + 1):
+                try:
+                    # execute_raw_query/ValidationEngine execution
+                    if DataQualityAgent._is_file_source(state['data_source_info'].source_type):
+                        from app.validation.engine import ValidationEngine
+                        engine = ValidationEngine()
+                        res = await engine.execute_agent_query(
+                            current_query, q_type, state['data_source_info'], state['data_source_info'].sample_data
+                        )
+                    else:
+                        res = await connector.execute_raw_query(current_query, q_type)
+                    
+                    if res.get("status") == "success":
+                        tool_result = res
+                        query = current_query # Track the final successful query
+                        break
+                    
+                    # Error handling and healing
+                    error_msg = res.get("error", "Unknown error")
+                    if attempt < max_healing_attempts:
+                        logger.warning(self.healing_service.format_healing_message(attempt + 1, error_msg))
+                        # Derive metadata for healing
+                        target_col = action_data.get("column_name") or self._derive_column_name(current_query)
+                        col_info = next((c for c in state.get("data_profile", {}).get("columns", []) if c.get("name") == target_col), {})
+                        
+                        corrected = await self.healing_service.get_correction(
+                            error_msg=error_msg,
+                            original_query=current_query,
+                            query_type=q_type,
+                            column_name=target_col,
+                            dtype=col_info.get("dtype", "unknown"),
+                            samples=col_info.get("samples", []),
+                            table_name=state['data_source_info'].target_path.split('.')[-1]
+                        )
+                        if corrected:
+                            current_query = corrected
+                            continue
+                    
+                    tool_result = res
+                except Exception as e:
+                    logger.error(f"Raw query execution failed: {e}")
+                    if attempt < max_healing_attempts:
+                        continue
+                    tool_result = {"status": "error", "error": str(e)}
+                    break
             
             try:
-                # execute_raw_query returns a dict with status/row_count/sample_rows
-                tool_result = await connector.execute_raw_query(query, q_type)
-            except (NotImplementedError, Exception) as e:
-                # If the connector doesn't support raw queries (e.g. local files), fall back to our in-memory sandbox
-                if isinstance(e, NotImplementedError) or "NotImplementedError" in str(e) or "not natively implemented" in str(e).lower():
-                    logger.info("Connector does not support raw query pushdown, falling back to ValidationEngine sandbox.")
-                    from app.validation.engine import ValidationEngine
-                    engine = ValidationEngine()
-                    tool_result = await engine.execute_agent_query(
-                        query, q_type, state['data_source_info'], state['data_source_info'].sample_data
-                    )
-                else:
-                    logger.error(f"Raw query execution failed: {e}")
-                    tool_result = {"status": "error", "error": str(e)}
-            finally:
-                try:
-                    await connector.disconnect()
-                except Exception:
-                    pass
+                await connector.disconnect()
+            except Exception:
+                pass
 
             validation_updates = {}
             if state["status"] == AgentStatus.VALIDATING and tool_result.get("status") != "error":
@@ -1606,6 +1652,14 @@ AVAILABLE TOOLS:
             "completed_at": datetime.utcnow().isoformat(),
         }
 
+
+    def _derive_column_name(self, query: str) -> str:
+        """Attempt to extract the primary column name from a SQL query."""
+        # Simple regex for "column" or [column] or column
+        match = re.search(r'["\[]?(\w+)["\]]?\s*(?:=|LIKE|GLOB|IN|IS)', query, re.IGNORECASE)
+        if match:
+            return match.group(1)
+        return "unknown"
 
     async def run(
         self,

@@ -18,6 +18,7 @@ from dataclasses import dataclass
 
 from app.agents.llm_service import get_llm_service
 from app.agents.llm_sanitizer import sanitize_llm_response
+from app.agents.healing_service import HealingService
 
 logger = logging.getLogger(__name__)
 
@@ -136,6 +137,7 @@ class ColumnAnalysisAgent:
         self.use_pandas = self.source_type in FILE_SOURCE_TYPES
         self.rules_to_run: List[Dict[str, Any]] = []
         self.execution_results: List[Dict[str, Any]] = []
+        self.healing_service = HealingService()
 
     async def analyze(self, table_name: str) -> ColumnQualityReport:
         lang = "Pandas" if self.use_pandas else "SQL"
@@ -242,14 +244,11 @@ class ColumnAnalysisAgent:
 
     # ── Stage 2: Rule Execution ─────────────────────────────────
 
-    async def _execute_rules(self) -> None:
+    async def _execute_rules(self, table_name: str) -> None:
         q_type = "pandas" if self.use_pandas else "sql"
 
         for rule in self.rules_to_run:
             raw_query = rule["query"]
-            # FIX: Unescape double-escaped column names
-            # LLM sometimes emits \\\"col\\\" in JSON which Python stores as \"col\"
-            # SQLite rejects backslash-quote — strip the backslashes.
             query = raw_query.replace('\\"', '"')
 
             if not self.use_pandas:
@@ -263,16 +262,48 @@ class ColumnAnalysisAgent:
                     })
                     continue
 
-            try:
-                result = await self.engine_executor(query=query, q_type=q_type)
-                self.execution_results.append({
-                    "rule_name": rule["rule_name"],
-                    "severity": rule.get("severity", "warning"),
-                    "query": query,
-                    "result": result,
-                })
-            except Exception as e:
-                logger.error(f"Execution failed for {self.column_name} rule '{rule['rule_name']}': {e}")
+            # ── Execution with Self-Healing Loop ──
+            max_healing_attempts = 2
+            current_query = query
+            final_result = None
+
+            for attempt in range(max_healing_attempts + 1):
+                try:
+                    result = await self.engine_executor(query=current_query, q_type=q_type)
+                    
+                    if result.get("status") == "success":
+                        final_result = result
+                        break
+                    
+                    # If it's an error, try to heal
+                    error_msg = result.get("error", "Unknown error")
+                    if attempt < max_healing_attempts:
+                        logger.warning(self.healing_service.format_healing_message(attempt + 1, error_msg))
+                        corrected = await self.healing_service.get_correction(
+                            error_msg=error_msg,
+                            original_query=current_query,
+                            query_type=q_type,
+                            column_name=self.column_name,
+                            dtype=self.dtype,
+                            samples=self.samples,
+                            table_name=table_name
+                        )
+                        if corrected:
+                            current_query = corrected
+                            continue
+                    
+                    final_result = result # Final failure
+                except Exception as e:
+                    logger.error(f"Execution failed for {self.column_name} rule '{rule['rule_name']}': {e}")
+                    final_result = {"status": "error", "error": str(e)}
+                    break
+
+            self.execution_results.append({
+                "rule_name": rule["rule_name"],
+                "severity": rule.get("severity", "warning"),
+                "query": current_query,
+                "result": final_result,
+            })
 
     def _validate_query_sanity(self, query: str, column_name: str, dtype: str) -> bool:
         query_upper = query.upper()
@@ -532,10 +563,11 @@ class BatchColumnAnalysisAgent:
         self.llm_service = get_llm_service()
         self.rules_to_run: List[Dict[str, Any]] = []
         self.execution_results: List[Dict[str, Any]] = []
+        self.healing_service = HealingService()
 
     async def analyze(self, table_name: str) -> Dict[str, ColumnQualityReport]:
         await self._generate_rules(table_name)
-        await self._execute_rules()
+        await self._execute_rules(table_name)
         return await self._evaluate_results()
 
     async def _generate_rules(self, table_name: str) -> None:
@@ -606,21 +638,57 @@ ALREADY EXECUTED (DO NOT DUPLICATE):
         logger.error(f"All batch attempts failed. Last error: {last_error}")
         self.rules_to_run = []
 
-    async def _execute_rules(self) -> None:
+    async def _execute_rules(self, table_name: str) -> None:
         q_type = "pandas" if self.use_pandas else "sql"
         for rule in self.rules_to_run:
-            # FIX: Unescape double-escaped column names
             query = rule["query"].replace('\\"', '"')
-            try:
-                result = await self.engine_executor(query=query, q_type=q_type)
-                self.execution_results.append({
-                    "rule_name": rule["rule_name"],
-                    "severity": rule.get("severity", "warning"),
-                    "query": query,
-                    "result": result,
-                })
-            except Exception as e:
-                logger.error(f"Batch execution failed for rule '{rule['rule_name']}': {e}")
+            
+            # Identify target column based on rule name or guess from schema
+            target_col = next((col for col in self.schema_data if rule["rule_name"].startswith(col)), None)
+            if not target_col:
+                target_col = list(self.schema_data.keys())[0] if self.schema_data else "unknown"
+            
+            col_info = self.schema_data.get(target_col, {"dtype": "unknown", "samples": []})
+
+            max_healing_attempts = 2
+            current_query = query
+            final_result = None
+
+            for attempt in range(max_healing_attempts + 1):
+                try:
+                    result = await self.engine_executor(query=current_query, q_type=q_type)
+                    if result.get("status") == "success":
+                        final_result = result
+                        break
+                    
+                    error_msg = result.get("error", "Unknown error")
+                    if attempt < max_healing_attempts:
+                        logger.warning(self.healing_service.format_healing_message(attempt + 1, error_msg))
+                        corrected = await self.healing_service.get_correction(
+                            error_msg=error_msg,
+                            original_query=current_query,
+                            query_type=q_type,
+                            column_name=target_col,
+                            dtype=col_info["dtype"],
+                            samples=col_info["samples"],
+                            table_name=table_name
+                        )
+                        if corrected:
+                            current_query = corrected
+                            continue
+                    
+                    final_result = result
+                except Exception as e:
+                    logger.error(f"Batch execution failed for tool '{rule['rule_name']}': {e}")
+                    final_result = {"status": "error", "error": str(e)}
+                    break
+
+            self.execution_results.append({
+                "rule_name": rule["rule_name"],
+                "severity": rule.get("severity", "warning"),
+                "query": current_query,
+                "result": final_result,
+            })
 
     async def _evaluate_results(self) -> Dict[str, ColumnQualityReport]:
         reports = {}
