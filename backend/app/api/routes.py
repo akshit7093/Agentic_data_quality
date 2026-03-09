@@ -1531,7 +1531,7 @@ async def get_settings_route():
         return {
             "provider": env_vars.get("LLM_PROVIDER", "ollama"),
             "ollama_base_url": env_vars.get("OLLAMA_BASE_URL", "http://localhost:11434"),
-            "ollama_model": env_vars.get("LLM_MODEL", "llama3.2"),
+            "ollama_model": env_vars.get("OLLAMA_MODEL", "llama3.2"),
             "lmstudio_base_url": env_vars.get("LMSTUDIO_BASE_URL", "http://localhost:1234/v1"),
             "openai_api_key": env_vars.get("OPENAI_API_KEY", ""),
             "openai_model": env_vars.get("OPENAI_MODEL", "gpt-4"),
@@ -1564,7 +1564,7 @@ async def update_settings(payload: LLMSettingsUpdate):
         
         if payload.provider == "ollama":
             if payload.ollama_base_url: set_key(env_path, "OLLAMA_BASE_URL", payload.ollama_base_url)
-            if payload.ollama_model: set_key(env_path, "LLM_MODEL", payload.ollama_model)
+            if payload.ollama_model: set_key(env_path, "OLLAMA_MODEL", payload.ollama_model)
         elif payload.provider == "openai":
             if payload.openai_api_key: set_key(env_path, "OPENAI_API_KEY", payload.openai_api_key)
             if payload.openai_model: set_key(env_path, "OPENAI_MODEL", payload.openai_model)

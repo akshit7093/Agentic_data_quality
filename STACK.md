@@ -37,6 +37,6 @@
 | Variable | Purpose | Required |
 |----------|---------|----------|
 | LLM_PROVIDER | Which LLM service to use | Yes |
-| LLM_MODEL | Specific model ID | Yes |
+| OLLAMA_MODEL | Specific model ID for Ollama | Yes (if Ollama) |
 | LLM_API_KEY | API key for cloud LLMs | Yes (if cloud) |
 | RAG_DB_PATH | Path to ChromaDB storage | No |

@@ -1359,9 +1359,10 @@ class ValidationToolExecutor:
 
         # ── Build command by substituting placeholders ────────────────
         command = tool_def["command"]
-        command = command.replace("{table}", self.table_name)
+        # Wrap identifiers in double quotes to handle spaces/keywords
+        command = command.replace("{table}", f'"{self.table_name}"')
         if column:
-            command = command.replace("{column}", column)
+            command = command.replace("{column}", f'"{column}"')
 
         if "{max_length}" in command:
             command = command.replace("{max_length}", str(kwargs.get("max_length", 255)))
@@ -1379,10 +1380,10 @@ class ValidationToolExecutor:
                 all_cols = list(schema.get("columns", {}).keys())
             else:
                 all_cols = [c.get("name") for c in schema if isinstance(c, dict)]
-            command = command.replace("{all_columns}", ", ".join(all_cols))
+            command = command.replace("{all_columns}", ", ".join(f'"{c}"' for c in all_cols))
         if "{columns}" in command:
             cols = kwargs.get("columns", [])
-            command = command.replace("{columns}", ", ".join(cols))
+            command = command.replace("{columns}", ", ".join(f'"{c}"' for c in cols))
 
         # Skip if required parameters are still unresolved
         if "{expected_values}" in command or "{deprecated_values}" in command:
