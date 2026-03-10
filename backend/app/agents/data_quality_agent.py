@@ -299,11 +299,22 @@ class DataQualityAgent:
         )
 
     @staticmethod
-    def _get_connector(source_type: str, connection_config: dict):
+    def _get_connector(
+        source_type: str, 
+        connection_config: dict,
+        selected_columns: Optional[List[str]] = None,
+        column_mapping: Optional[Dict[str, str]] = None,
+        slice_filters: Optional[Dict[str, Any]] = None
+    ):
         """Return the appropriate connector — DuckDB for flat files, factory default otherwise."""
         if DataQualityAgent._is_file_source(source_type):
             from app.connectors.dataframe_connector import DuckDBFileConnector
-            return DuckDBFileConnector(connection_config)
+            return DuckDBFileConnector(
+                connection_config,
+                selected_columns=selected_columns,
+                column_mapping=column_mapping,
+                slice_filters=slice_filters
+            )
         return ConnectorFactory.create_connector(source_type, connection_config)
 
     async def _setup_connection(self, state: AgentState) -> Dict[str, Any]:
@@ -320,7 +331,14 @@ class DataQualityAgent:
             connection_config = state['data_source_info'].connection_config
             target = state['data_source_info'].target_path
 
-            connector = self._get_connector(source_type, connection_config)
+            ds_info = state['data_source_info']
+            connector = self._get_connector(
+                source_type, 
+                connection_config,
+                selected_columns=ds_info.selected_columns,
+                column_mapping=ds_info.column_mapping,
+                slice_filters=ds_info.slice_filters
+            )
             await connector.connect(resource_path=target)
             schema = await connector.get_schema(target)
 
@@ -649,14 +667,24 @@ AVAILABLE TOOLS:
                     "exploration_steps": state.get("exploration_steps", 0),
                 }
 
-            # Create connector for tool executor
+            # Create connector with session scope for tool executor
+            ds_info = state['data_source_info']
             connector = self._get_connector(
-                state['data_source_info'].source_type,
-                state['data_source_info'].connection_config
+                ds_info.source_type,
+                ds_info.connection_config,
+                selected_columns=ds_info.selected_columns,
+                column_mapping=ds_info.column_mapping,
+                slice_filters=ds_info.slice_filters
             )
             await connector.connect(resource_path=target_table)
 
-            tool_executor = ValidationToolExecutor(connector, target_table)
+            # Resolve original names for executor
+            selected_columns = state['data_source_info'].selected_columns
+            column_mapping = state['data_source_info'].column_mapping or {}
+            rev_map = {alias: orig for orig, alias in column_mapping.items()}
+            source_cols = [rev_map.get(c, c) for c in (selected_columns or [])]
+            
+            tool_executor = ValidationToolExecutor(connector, target_table, source_cols or None)
             results_summary = []
             validation_updates = {}
             current_results = list(state.get("validation_results", []))
@@ -1583,12 +1611,15 @@ AVAILABLE TOOLS:
                 rag_chunks_saved += 1
             # BUG 6 FIX: add_schema_context was never called — schema was saved to state but
             # never written to RAG, so retrieve_context() during validation could not find it.
-            schema = state['data_source_info'].schema
+            ds_info = state['data_source_info']
+            schema = ds_info.schema
             if schema and hasattr(rag_service, 'add_schema_context'):
                 await rag_service.add_schema_context(
                     source_id=table_name_rag,
                     schema=schema if isinstance(schema, dict) else {"columns": {}},
-                    sample_data=(state['data_source_info'].sample_data or [])[:10],
+                    sample_data=(ds_info.sample_data or [])[:10],
+                    selected_columns=ds_info.selected_columns,
+                    column_mapping=ds_info.column_mapping
                 )
                 rag_chunks_saved += 1
             logger.info(f"  💾 RAG: {rag_chunks_saved} chunk(s) saved for '{table_name_rag}'")

@@ -1262,7 +1262,10 @@ async def chat_with_agent(request: ChatRequest):
         source_type=source["source_type"],
         connection_config=source["connection_config"],
         target_path=target_path,
-        schema=v.get("result", {}).get("schema")
+        schema=v.get("result", {}).get("schema"),
+        selected_columns=v.get("selected_columns"),
+        column_mapping=v.get("column_mapping"),
+        slice_filters=v.get("slice_filters"),
     )
 
     from app.agents.chatbot_agent import ChatbotAgent

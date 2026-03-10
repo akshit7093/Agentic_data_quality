@@ -19,10 +19,21 @@ from app.connectors.dataframe_connector import DuckDBFileConnector
 
 _FILE_SOURCE_TYPES = {"local_file", "csv", "json", "jsonl", "excel", "parquet", "feather", "tsv"}
 
-def _make_connector(source_type: str, connection_config: dict):
+def _make_connector(
+    source_type: str, 
+    connection_config: dict,
+    selected_columns: Optional[List[str]] = None,
+    column_mapping: Optional[Dict[str, str]] = None,
+    slice_filters: Optional[Dict[str, Any]] = None
+):
     """Return DuckDBFileConnector for flat files, factory default otherwise."""
     if str(source_type).lower() in _FILE_SOURCE_TYPES:
-        return DuckDBFileConnector(connection_config)
+        return DuckDBFileConnector(
+            connection_config,
+            selected_columns=selected_columns,
+            column_mapping=column_mapping,
+            slice_filters=slice_filters
+        )
     return ConnectorFactory.create_connector(source_type, connection_config)
 from app.agents.tool_based_agent import ValidationToolExecutor
 from app.agents.filter_discovery import DiscoveryManager, UserFilterSelection, UserPivotSelection
@@ -151,16 +162,27 @@ class ChatbotAgent:
             action_data = json.loads(match.group(0))
             action = action_data.get("action")
             
+            ds_info = state['data_source_info']
             connector = _make_connector(
-                state['data_source_info'].source_type,
-                state['data_source_info'].connection_config
+                ds_info.source_type,
+                ds_info.connection_config,
+                selected_columns=ds_info.selected_columns,
+                column_mapping=ds_info.column_mapping,
+                slice_filters=ds_info.slice_filters
             )
             await connector.connect()
             
             results = []
             
             if action == "execute_tools":
-                tool_executor = ValidationToolExecutor(connector, state['data_source_info'].target_path)
+                # Resolve original names for executor
+                ds_info = state['data_source_info']
+                selected_columns = ds_info.selected_columns
+                column_mapping = ds_info.column_mapping or {}
+                rev_map = {alias: orig for orig, alias in column_mapping.items()}
+                source_cols = [rev_map.get(c, c) for c in (selected_columns or [])]
+                
+                tool_executor = ValidationToolExecutor(connector, ds_info.target_path, source_cols or None)
                 for sel in action_data.get("tool_selections", []):
                     res = await tool_executor.execute_tool(sel["tool_id"], column=sel.get("column"))
                     results.append(res.__dict__)

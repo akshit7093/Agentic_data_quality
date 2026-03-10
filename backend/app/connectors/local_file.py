@@ -137,6 +137,9 @@ class LocalFileConnector(FileConnector):
         # Read a small sample to infer schema
         df = await self._read_multiple_files(file_paths, limit=100)
         
+        # ── APPLY SESSION SCOPE ──
+        df = self._apply_session_scope(df)
+
         # Determine format from the first file
         file_format = self._get_file_format(file_paths[0])
         
@@ -281,6 +284,9 @@ class LocalFileConnector(FileConnector):
         
         df = await self._read_multiple_files(file_paths, columns=columns, limit=limit)
         
+        # ── APPLY SESSION SCOPE ──
+        df = self._apply_session_scope(df)
+
         if offset:
             df = df.iloc[offset:]
         
@@ -323,6 +329,9 @@ class LocalFileConnector(FileConnector):
         file_paths = self._resolve_files(resource_path)
         df = await self._read_multiple_files(file_paths)
         
+        # ── APPLY SESSION SCOPE ──
+        df = self._apply_session_scope(df)
+
         if method == "random":
             df = df.sample(n=min(sample_size, len(df)))
         elif method == "first":
@@ -387,3 +396,29 @@ class LocalFileConnector(FileConnector):
             "The ValidationEngine will automatically catch this and use its in-memory "
             "sandbox (SQLite/Pandas) to execute the agent's query against the local file data."
         )
+    def _apply_session_scope(self, df: pd.DataFrame) -> pd.DataFrame:
+        "Apply session-level filters, renaming, and column subsetting."
+        # 1. Filters
+        if self.slice_filters:
+            for col, val in self.slice_filters.items():
+                if col in df.columns:
+                    df = df[df[col] == val]
+            logger.info(f'[LocalFileConnector] Applied filters: {self.slice_filters} (rows: {len(df)})')
+        
+        # 2. Renaming
+        if self.column_mapping:
+            # column_mapping is original_name -> renamed_name
+            existing = {k: v for k, v in self.column_mapping.items() if k in df.columns}
+            if existing:
+                df = df.rename(columns=existing)
+                logger.info(f'[LocalFileConnector] Applied renaming: {existing}')
+        
+        # 3. Subsetting
+        if self.selected_columns:
+            # selected_columns are likely the RENAMED names
+            available = [c for c in self.selected_columns if c in df.columns]
+            if available:
+                df = df[available]
+                logger.info(f'[LocalFileConnector] Subset to {len(available)} columns')
+        
+        return df

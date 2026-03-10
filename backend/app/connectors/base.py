@@ -35,8 +35,17 @@ class TableSchema:
 class BaseConnector(ABC):
     """Abstract base class for all data connectors."""
     
-    def __init__(self, connection_config: Dict[str, Any]):
+    def __init__(
+        self, 
+        connection_config: Dict[str, Any],
+        selected_columns: Optional[List[str]] = None,
+        column_mapping: Optional[Dict[str, str]] = None,
+        slice_filters: Optional[Dict[str, Any]] = None
+    ):
         self.connection_config = connection_config
+        self.selected_columns = selected_columns
+        self.column_mapping = column_mapping or {}
+        self.slice_filters = slice_filters or {}
         self._connection = None
         self._is_connected = False
     
@@ -199,8 +208,19 @@ class FileConnector(BaseConnector):
     
     SUPPORTED_FORMATS = []
     
-    def __init__(self, connection_config: Dict[str, Any]):
-        super().__init__(connection_config)
+    def __init__(
+        self, 
+        connection_config: Dict[str, Any],
+        selected_columns: Optional[List[str]] = None,
+        column_mapping: Optional[Dict[str, str]] = None,
+        slice_filters: Optional[Dict[str, Any]] = None
+    ):
+        super().__init__(
+            connection_config, 
+            selected_columns=selected_columns, 
+            column_mapping=column_mapping, 
+            slice_filters=slice_filters
+        )
         self.base_path = connection_config.get('base_path', '')
     
     def _resolve_path(self, resource_path: str) -> str:

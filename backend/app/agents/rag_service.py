@@ -166,6 +166,8 @@ class RAGService:
         source_id: str,
         schema: Dict[str, Any],
         sample_data: Optional[List[Dict]] = None,
+        selected_columns: Optional[List[str]] = None,
+        column_mapping: Optional[Dict[str, str]] = None,
     ) -> str:
         """Add schema information as context."""
         # Format schema content
@@ -173,7 +175,26 @@ class RAGService:
 
 Columns:
 """
-        for col_name, col_info in schema.get("columns", {}).items():
+        # ── DEFENSIVE FILTERING: Ensure only selected columns are indexed ──
+        original_cols = schema.get("columns", {})
+        if selected_columns:
+            # Resolve aliases back to original names if needed
+            rev_map = {v: k for k, v in (column_mapping or {}).items()}
+            filtered_cols = {}
+            for col in selected_columns:
+                # Check for alias first, then original name
+                orig_name = rev_map.get(col, col)
+                if orig_name in original_cols:
+                    filtered_cols[col] = original_cols[orig_name]
+                elif col in original_cols:
+                    filtered_cols[col] = original_cols[col]
+            
+            # If we found matches, use them. Otherwise, index nothing for safety.
+            target_cols = filtered_cols
+        else:
+            target_cols = original_cols
+
+        for col_name, col_info in target_cols.items():
             schema_content += f"- {col_name}: {col_info.get('type', 'unknown')}"
             if col_info.get('nullable') is not None:
                 schema_content += f" (nullable: {col_info['nullable']})"
@@ -181,16 +202,26 @@ Columns:
                 schema_content += f" - {col_info['description']}"
             schema_content += "\n"
         
+        # ── DEFENSIVE SAMPLING: Filter sample data rows to selected columns ──
         if sample_data:
-            schema_content += f"\nSample Data ({len(sample_data)} rows):\n"
-            schema_content += json.dumps(sample_data[:5], indent=2, default=str)
+            safe_samples = []
+            for row in sample_data[:10]:
+                if selected_columns:
+                    # Filter row to only authorized keys
+                    safe_samples.append({k: v for k, v in row.items() if k in selected_columns})
+                else:
+                    safe_samples.append(row)
+            
+            if safe_samples:
+                schema_content += f"\nSample Data ({len(safe_samples)} rows):\n"
+                schema_content += json.dumps(safe_samples[:5], indent=2, default=str)
         
         return await self.add_document(
             document_type="schema",
             source_id=source_id,
             title=f"Schema: {source_id}",
             content=schema_content,
-            metadata={"column_count": len(schema.get("columns", {}))}
+            metadata={"column_count": len(target_cols)}
         )
     
     async def add_validation_history(

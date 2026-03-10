@@ -105,13 +105,24 @@ def _safe_rows(df: pd.DataFrame, limit: int = 100) -> List[Dict[str, Any]]:
 class DuckDBFileConnector:
     """Async flat-file connector backed by DuckDB (in-memory)."""
 
-    def __init__(self, connection_config: Dict[str, Any]):
+    def __init__(
+        self, 
+        connection_config: Dict[str, Any],
+        selected_columns: Optional[List[str]] = None,
+        column_mapping: Optional[Dict[str, str]] = None,
+        slice_filters: Optional[Dict[str, Any]] = None
+    ):
         self.base_path: str = connection_config.get("base_path", ".")
         self._conn = None                   # duckdb.DuckDBPyConnection
         self._df: Optional[pd.DataFrame] = None
         self.original_name: Optional[str] = None   # raw resource_path as given
         self.table_name: Optional[str] = None       # sanitised DuckDB view name
         self._schema_cache: Optional[Dict] = None
+
+        # ── Scope attributes ──────────────────────────────────────────────────
+        self.selected_columns = selected_columns
+        self.column_mapping = column_mapping or {}     # original_name → renamed_name
+        self.slice_filters = slice_filters or {}
 
     # ── Lifecycle ──────────────────────────────────────────────────────────────
 
@@ -167,6 +178,31 @@ class DuckDBFileConnector:
         # Strip whitespace from column names
         df.columns = [str(c).strip() for c in df.columns]
 
+        # ── APPLY SESSION SCOPE ───────────────────────────────────────
+        # 1. Slice filters (e.g. state='CA')
+        if self.slice_filters:
+            for col, val in self.slice_filters.items():
+                if col in df.columns:
+                    df = df[df[col] == val]
+            logger.info(f"[DuckDBFileConnector] Applied filters: {self.slice_filters} (rows: {len(df)})")
+
+        # 2. Rename columns
+        if self.column_mapping:
+            # column_mapping is original_name -> renamed_name
+            # subset mapping to only what's actually in df
+            existing_mapping = {k: v for k, v in self.column_mapping.items() if k in df.columns}
+            if existing_mapping:
+                df = df.rename(columns=existing_mapping)
+                logger.info(f"[DuckDBFileConnector] Applied rename mapping: {existing_mapping}")
+
+        # 3. Subset columns
+        if self.selected_columns:
+            # selected_columns are likely the RENAMED names if they came from a template
+            available_cols = [c for c in self.selected_columns if c in df.columns]
+            if available_cols:
+                df = df[available_cols]
+                logger.info(f"[DuckDBFileConnector] Subset to {len(available_cols)} selected columns.")
+
         self._df = df
         self.original_name = resource_path
         self.table_name = _sanitize_table_name(resource_path)
@@ -186,7 +222,7 @@ class DuckDBFileConnector:
         self._conn.register("data_table", df)
 
         logger.info(
-            f"[DuckDBFileConnector] Loaded '{resource_path}' → "
+            f"[DuckDBFileConnector] Loaded and Registered '{resource_path}' → "
             f"table='{self.table_name}' ({len(df):,} rows × {len(df.columns)} cols)"
         )
 

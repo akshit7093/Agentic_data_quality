@@ -1328,6 +1328,23 @@ class ValidationToolExecutor:
         import time
         start_time = time.time()
 
+        # ── AUTH CHECK: Ensure column is in selected scope ────────────────────
+        if self.selected_columns and column:
+            if column not in self.selected_columns:
+                print(f"[SECURITY] Blocked unauthorized access to column: {column}")
+                return ToolResult(
+                    tool_id=tool_id,
+                    tool_name=tool_id,
+                    command_executed="BLOCK_UNAUTHORIZED_SCOPE",
+                    status="skipped",
+                    row_count=0,
+                    failed_count=0,
+                    sample_rows=[],
+                    message=f"Unauthorized column access: '{column}' is not in selected scope.",
+                    severity="info",
+                    column_name=column,
+                )
+
         # ── Tool lookup: Universal → Table → Column ──────────────────
         tool_def = None
         tool_category = None

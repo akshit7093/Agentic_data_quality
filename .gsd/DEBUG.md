@@ -12,9 +12,9 @@ expecting: Identify exactly where the restricted list is dropped or bypassed.
 next_action: Add `print()` and `logger.info()` to `routes.py`, `data_quality_agent.py`, and `tool_based_agent.py`.
 
 ## Symptoms
-expected: Only columns selected in the UI should be analyzed.
-actual: LLM/Tools still analyze or access non-selected columns.
-errors: Reported persistent column scope issue.
+expected: 1. Only columns selected in the UI should be analyzed. 2. UI Slice filters (e.g. state='CA') should be applied to the data analyzed by the agent. 3. Pivots/subset views should be respected.
+actual: 1. LLM/Tools see all columns in prompts/execution. 2. Agent analyzes the entire dataset regardless of UI filters.
+errors: Persistent escape of column scope and filter constraints.
 
 ## Hypotheses
 | # | Hypothesis | Likelihood | Status |
