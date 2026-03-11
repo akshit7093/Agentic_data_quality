@@ -727,7 +727,10 @@ AVAILABLE TOOLS:
                 # Record validation result if in validation phase
                 if state["status"] == AgentStatus.VALIDATING and tool_result.status == "success":
                     rule_name = f"{column}_{tool_id}" if column else tool_id
-                    existing_names = {r.rule_name for r in current_results}
+                    existing_names = {
+                        (r.get("rule_name") if isinstance(r, dict) else r.rule_name)
+                        for r in current_results
+                    }
                     if rule_name not in existing_names:
                         row_count = state["data_source_info"].row_count or 0
                         failed = tool_result.failed_count or 0
@@ -873,7 +876,10 @@ AVAILABLE TOOLS:
                 }
                 severity = severity_map.get(raw_severity, "warning")
                 current_results = list(state.get("validation_results", []))
-                existing_names = {r.rule_name for r in current_results}
+                existing_names = {
+                    (r.get("rule_name") if isinstance(r, dict) else r.rule_name)
+                    for r in current_results
+                }
                 if rule_name not in existing_names:
                     failed_count = tool_result.get("row_count", 0)
                     row_count = state["data_source_info"].row_count or 0
@@ -1019,9 +1025,10 @@ AVAILABLE TOOLS:
             logger.info("☁️ Cloud provider detected. Running Batch LLM Analysis for all columns simultaneously...")
             
             sample_data_list = state['data_source_info'].sample_data or []
-            schema_data = {}
+            column_mapping = state['data_source_info'].column_mapping or {}
             for col in columns_to_validate:
                 col_name = col["name"]
+                display_name = column_mapping.get(col_name, col_name)
                 seen = set()
                 samples = []
                 for row in sample_data_list:
@@ -1031,11 +1038,19 @@ AVAILABLE TOOLS:
                         seen.add(sv)
                         samples.append(v)
                     if len(samples) >= 10: break
-                schema_data[col_name] = {"dtype": col.get("type", "TEXT"), "samples": samples}
+                schema_data[col_name] = {
+                    "dtype": col.get("type", "TEXT"), 
+                    "samples": samples,
+                    "display_name": display_name
+                }
                 
+            ds_info = state["data_source_info"]
             llm_connector = self._get_connector(
-                state["data_source_info"].source_type,
-                state["data_source_info"].connection_config,
+                ds_info.source_type,
+                ds_info.connection_config,
+                selected_columns=ds_info.selected_columns,
+                column_mapping=ds_info.column_mapping,
+                slice_filters=ds_info.slice_filters
             )
             await llm_connector.connect()
 
@@ -1118,12 +1133,15 @@ AVAILABLE TOOLS:
 
         col_meta   = columns_to_validate[current_column_idx]
         col_name   = col_meta["name"]
+        column_mapping = state['data_source_info'].column_mapping or {}
+        display_name = column_mapping.get(col_name, col_name)
+        
         col_type   = col_meta.get("type", "TEXT")
         table_name = state["data_source_info"].target_path
         mode       = state["validation_mode"].value if hasattr(state["validation_mode"], "value") else str(state["validation_mode"])
         total_rows = state["data_source_info"].row_count or 1000
 
-        logger.info(f"  Column {current_column_idx+1}/{len(columns_to_validate)}: '{col_name}' ({col_type}) | mode={mode}")
+        logger.info(f"  Column {current_column_idx+1}/{len(columns_to_validate)}: '{col_name}' (Display: '{display_name}') ({col_type}) | mode={mode}")
 
         # ── Sample values for this column ─────────────────────────────
         sample_data = state["data_source_info"].sample_data or []
@@ -1143,14 +1161,21 @@ AVAILABLE TOOLS:
         logger.info(f"  → {len(rules)} rules generated")
 
         # ── Execute all rules ──────────────────────────────────────────
+        ds_info = state["data_source_info"]
         connector = self._get_connector(
-            state["data_source_info"].source_type,
-            state["data_source_info"].connection_config,
+            ds_info.source_type,
+            ds_info.connection_config,
+            selected_columns=ds_info.selected_columns,
+            column_mapping=ds_info.column_mapping,
+            slice_filters=ds_info.slice_filters
         )
         await connector.connect(resource_path=table_name)
 
         current_results = list(state.get("validation_results", []))
-        existing_names  = {r.rule_name for r in current_results}
+        existing_names = {
+            (r.get("rule_name") if isinstance(r, dict) else r.rule_name)
+            for r in current_results
+        }
         sev_map = {"high": "critical", "critical": "critical",
                    "medium": "warning", "warning": "warning",
                    "low": "info",      "info":     "info"}
@@ -1198,9 +1223,10 @@ AVAILABLE TOOLS:
                 severity=severity,
                 rule_type="deterministic_sql",
                 executed_query=query,
-                column_name=col_name,  # for grouped dashboard display
+                column_name=display_name,  # Use display name for grouped dashboard display
+                internal_column=col_name,  # Keep original name internally
                 check_origin="pre_built",
-                agent_reasoning=DataQualityAgent._describe_check(rule_name, col_name, col_type, query),
+                agent_reasoning=DataQualityAgent._describe_check(rule_name, display_name, col_type, query),
                 agent_comprehension=f"Query returned {failed_count} failing row(s) out of {total_rows}. {'PASS — no issues detected.' if failed_count == 0 else f'FAIL — {failure_pct}% of rows violated this rule.'}",
             )
             current_results.append(res)
@@ -1260,6 +1286,7 @@ AVAILABLE TOOLS:
                     source_type=source_type,
                     rag_context=rag_context,  # BUG 6 FIX: pass retrieved context into LLM prompt
                     existing_rule_names=list(existing_names),  # Prevent LLM from duplicating pre-built rules
+                    display_name=display_name, # Pass display name
                 )
 
                 report = await col_agent.analyze(table_name)
@@ -1285,9 +1312,10 @@ AVAILABLE TOOLS:
                         severity=sev,
                         rule_type="llm_generated_sql",
                         executed_query=llm_rule.get("executed_query", ""),
-                        column_name=col_name,
+                        column_name=display_name,
+                        internal_column=col_name,
                         check_origin="llm_generated",
-                        agent_reasoning=f"LLM analyzed column '{col_name}' ({col_type}) in '{mode}' mode and generated this custom check: {rname}.",
+                        agent_reasoning=f"LLM analyzed column '{display_name}' ({col_type}) in '{mode}' mode and generated this custom check: {rname}.",
                         agent_comprehension=f"Query returned {failed} failing row(s) out of {total_rows}. {'PASS — no issues detected.' if failed == 0 else f'FAIL — {failure_pct}% of rows violated this rule.'}",
                     ))
                     existing_names.add(rname)
@@ -1652,18 +1680,24 @@ AVAILABLE TOOLS:
 
         results = state.get("validation_results", [])
         total = len(results)
-        passed = sum(1 for r in results if r.status == "passed")
-        failed = sum(1 for r in results if r.status == "failed")
-        critical = sum(1 for r in results if r.status == "failed" and r.severity == "critical")
+        
+        def _g(o, k, d=None):
+            return o.get(k, d) if isinstance(o, dict) else getattr(o, k, d)
+
+        passed = sum(1 for r in results if _g(r, "status") == "passed")
+        failed = sum(1 for r in results if _g(r, "status") == "failed")
+        critical = sum(1 for r in results if _g(r, "status") == "failed" and _g(r, "severity") == "critical")
 
         # Calculate score using weighted approach
         score = 0.0
         if total > 0:
             per_rule = 100.0 / total
             for r in results:
-                if r.status == "passed":
+                r_status = _g(r, "status")
+                r_severity = _g(r, "severity")
+                if r_status == "passed":
                     score += per_rule  # Full score
-                elif r.severity == "warning":
+                elif r_severity == "warning":
                     score += per_rule * 0.3  # Partial credit for warnings
                 # Critical failures get 0
             score = round(max(0.0, min(100.0, score)), 2)
@@ -1702,11 +1736,13 @@ AVAILABLE TOOLS:
         # Per-column rule summary
         by_col: Dict[str, Dict[str, int]] = {}
         for r in results:
-            col = getattr(r, "column_name", None) or "table_level"
+            col = _g(r, "column_name") or "table_level"
             if col not in by_col:
                 by_col[col] = {"passed": 0, "failed": 0, "critical": 0}
-            by_col[col]["passed" if r.status == "passed" else "failed"] += 1
-            if r.status == "failed" and r.severity == "critical":
+            r_status = _g(r, "status")
+            r_severity = _g(r, "severity")
+            by_col[col]["passed" if r_status == "passed" else "failed"] += 1
+            if r_status == "failed" and r_severity == "critical":
                 by_col[col]["critical"] += 1
         for col, counts in by_col.items():
             flag = "⚠" if counts["critical"] else ("✗" if counts["failed"] else "✓")
@@ -1726,16 +1762,20 @@ AVAILABLE TOOLS:
         ]
 
         # Top failed rules
-        failed_rules = [r for r in results if r.status == "failed"]
-        failed_rules.sort(key=lambda r: (r.severity != "critical", -r.failed_count))
+        failed_rules = [r for r in results if _g(r, "status") == "failed"]
+        failed_rules.sort(key=lambda r: (_g(r, "severity") != "critical", -_g(r, "failed_count", 0)))
         if failed_rules:
             execution_log_lines.append("")
             execution_log_lines.append("── TOP ISSUES ────────────────────────────────────────────")
             for r in failed_rules[:10]:
-                sev_icon = "🔴" if r.severity == "critical" else "🟡"
+                r_severity = _g(r, "severity")
+                r_rule_name = _g(r, "rule_name")
+                r_failed_count = _g(r, "failed_count", 0)
+                r_failure_percentage = _g(r, "failure_percentage", 0)
+                sev_icon = "🔴" if r_severity == "critical" else "🟡"
                 execution_log_lines.append(
-                    f"  {sev_icon} {r.rule_name} [{r.severity}]: {r.failed_count} failing rows "
-                    f"({r.failure_percentage:.1f}%)"
+                    f"  {sev_icon} {r_rule_name} [{r_severity}]: {r_failed_count} failing rows "
+                    f"({r_failure_percentage:.1f}%)"
                 )
 
         execution_log = "\n".join(execution_log_lines)

@@ -130,6 +130,18 @@ interface DataExplorerProps {
     // Template session — when set, filter/pivot operate on the virtual restricted dataset
     templateSessionId?: string | null;
     templateSessionInfo?: { columns: string[]; row_count: number; templateName: string; rename_map: Record<string, string> } | null;
+    initialState?: {
+        filterDraft: Record<string, FilterSelection>;
+        pivotConfig: {
+            dimension: string;
+            dimension2: string;
+            measure: string;
+            agg: string;
+            result: Record<string, any>[] | null;
+            chart: string | null;
+        };
+    } | null;
+    onStateChange?: (state: any) => void;
 }
 
 type SemanticType = 'numeric' | 'categorical' | 'boolean' | 'datetime' | 'text' | 'unknown';
@@ -185,20 +197,39 @@ export default function DataExplorer({
     onViewCompleteData,
     templateSessionId,
     templateSessionInfo,
+    initialState,
+    onStateChange,
 }: DataExplorerProps) {
     const [activeTab, setActiveTab] = useState<'columns' | 'filters' | 'pivot'>('columns');
 
     // Pivot Builder state
-    const [pivotDimension, setPivotDimension] = useState<string>('');
-    const [pivotDimension2, setPivotDimension2] = useState<string>('');  // Secondary (column) dimension
-    const [pivotMeasure, setPivotMeasure] = useState<string>('');
-    const [pivotAgg, setPivotAgg] = useState<string>('count');
-    const [pivotResult, setPivotResult] = useState<Record<string, any>[] | null>(null);
+    const [pivotDimension, setPivotDimension] = useState<string>(initialState?.pivotConfig?.dimension || '');
+    const [pivotDimension2, setPivotDimension2] = useState<string>(initialState?.pivotConfig?.dimension2 || '');  // Secondary (column) dimension
+    const [pivotMeasure, setPivotMeasure] = useState<string>(initialState?.pivotConfig?.measure || '');
+    const [pivotAgg, setPivotAgg] = useState<string>(initialState?.pivotConfig?.agg || 'count');
+    const [pivotResult, setPivotResult] = useState<Record<string, any>[] | null>(initialState?.pivotConfig?.result || null);
     const [pivotLoading, setPivotLoading] = useState(false);
-    const [pivotChart, setPivotChart] = useState<string | null>(null);
+    const [pivotChart, setPivotChart] = useState<string | null>(initialState?.pivotConfig?.chart || null);
 
     // Per-column filter draft state (user hasn't "applied" yet)
-    const [filterDraft, setFilterDraft] = useState<Record<string, FilterSelection>>({});
+    const [filterDraft, setFilterDraft] = useState<Record<string, FilterSelection>>(initialState?.filterDraft || {});
+
+    // Sync back to parent
+    React.useEffect(() => {
+        if (onStateChange) {
+            onStateChange({
+                filterDraft,
+                pivotConfig: {
+                    dimension: pivotDimension,
+                    dimension2: pivotDimension2,
+                    measure: pivotMeasure,
+                    agg: pivotAgg,
+                    result: pivotResult,
+                    chart: pivotChart,
+                }
+            });
+        }
+    }, [filterDraft, pivotDimension, pivotDimension2, pivotMeasure, pivotAgg, pivotResult, pivotChart]);
 
     const dm = discoveryMetadata;
     const fm = dm?.filter_metadata;

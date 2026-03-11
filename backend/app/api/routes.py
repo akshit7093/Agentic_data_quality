@@ -69,6 +69,14 @@ def _save_store():
     except Exception as e:
         logger.error(f"Error saving validation store: {e}")
 
+def _get_val(obj: Any, key: str, default: Any = None) -> Any:
+    """Helper to safely get value from object (attribute) or dict (key)."""
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
 _load_store()
 
 # ============================================================================
@@ -649,32 +657,32 @@ async def get_validation_results(validation_id: str):
     serialized = []
     for r in validation_results:
         serialized.append({
-            "rule_name": getattr(r, "rule_name", "unknown"),
-            "column_name": getattr(r, "column_name", None),
-            "status": getattr(r, "status", "unknown"),
-            "severity": getattr(r, "severity", "info"),
-            "rule_type": getattr(r, "rule_type", ""),
-            "failed_count": getattr(r, "failed_count", 0),
-            "total_count": getattr(r, "total_count", 0),
-            "failure_percentage": getattr(r, "failure_percentage", 0),
-            "failure_examples": getattr(r, "failure_examples", [])[:5],
-            "executed_query": getattr(r, "executed_query", None),
-            "data_source": getattr(r, "data_source", "full_dataset"),
-            "check_origin": getattr(r, "check_origin", "pre_built"),
-            "agent_reasoning": getattr(r, "agent_reasoning", None),
-            "agent_comprehension": getattr(r, "agent_comprehension", None),
+            "rule_name": _get_val(r, "rule_name", "unknown"),
+            "column_name": _get_val(r, "column_name"),
+            "status": _get_val(r, "status", "unknown"),
+            "severity": _get_val(r, "severity", "info"),
+            "rule_type": _get_val(r, "rule_type", ""),
+            "failed_count": _get_val(r, "failed_count", 0),
+            "total_count": _get_val(r, "total_count", 0),
+            "failure_percentage": _get_val(r, "failure_percentage", 0),
+            "failure_examples": _get_val(r, "failure_examples", [])[:5],
+            "executed_query": _get_val(r, "executed_query"),
+            "data_source": _get_val(r, "data_source", "full_dataset"),
+            "check_origin": _get_val(r, "check_origin", "pre_built"),
+            "agent_reasoning": _get_val(r, "agent_reasoning"),
+            "agent_comprehension": _get_val(r, "agent_comprehension"),
         })
 
     fixes = []
     for f in fix_recommendations:
         fixes.append({
-            "rule_id": getattr(f, "rule_id", ""),
-            "issue_description": getattr(f, "issue_description", ""),
-            "recommended_fix": getattr(f, "recommended_fix", ""),
-            "fix_query": getattr(f, "fix_query", None),
-            "estimated_rows_affected": getattr(f, "estimated_rows_affected", 0),
-            "risk_level": getattr(f, "risk_level", "low"),
-            "user_action": getattr(f, "user_action", "manual"),
+            "rule_id": _get_val(f, "rule_id", ""),
+            "issue_description": _get_val(f, "issue_description", ""),
+            "recommended_fix": _get_val(f, "recommended_fix", ""),
+            "fix_query": _get_val(f, "fix_query"),
+            "estimated_rows_affected": _get_val(f, "estimated_rows_affected", 0),
+            "risk_level": _get_val(f, "risk_level", "low"),
+            "user_action": _get_val(f, "user_action", "manual"),
         })
 
     return {
@@ -746,7 +754,7 @@ async def create_ticket(validation_id: str, request: TicketRequest):
     failure_examples = []
     
     for r in results:
-        r_name = r.get("rule_name") if isinstance(r, dict) else getattr(r, "rule_name", None)
+        r_name = _get_val(r, "rule_name")
         if r_name == primary_rule:
             rule_details = r if isinstance(r, dict) else asdict(r)
             failure_examples = rule_details.get("failure_examples", [])[:5]
@@ -892,7 +900,7 @@ async def _export_to_csv(result: Dict, filename: str, request: ExportRequest) ->
         validation_results = result.get("validation_results", [])
         failed_rows = []
         for vr in validation_results:
-            failed_rows.extend(getattr(vr, "failure_examples", [])[:100])
+            failed_rows.extend(_get_val(vr, "failure_examples", [])[:100])
 
         if failed_rows:
             rows_df = pd.DataFrame(failed_rows)
@@ -916,12 +924,12 @@ async def _export_to_excel(result: Dict, filename: str, request: ExportRequest) 
             vr_data = []
             for vr in validation_results:
                 vr_data.append({
-                    "rule_name": getattr(vr, "rule_name", ""),
-                    "status": getattr(vr, "status", ""),
-                    "severity": getattr(vr, "severity", ""),
-                    "failed_count": getattr(vr, "failed_count", 0),
-                    "total_count": getattr(vr, "total_count", 0),
-                    "failure_percentage": getattr(vr, "failure_percentage", 0),
+                    "rule_name": _get_val(vr, "rule_name", ""),
+                    "status": _get_val(vr, "status", ""),
+                    "severity": _get_val(vr, "severity", ""),
+                    "failed_count": _get_val(vr, "failed_count", 0),
+                    "total_count": _get_val(vr, "total_count", 0),
+                    "failure_percentage": _get_val(vr, "failure_percentage", 0),
                 })
             pd.DataFrame(vr_data).to_excel(writer, sheet_name="Validation Results", index=False)
 
@@ -930,11 +938,11 @@ async def _export_to_excel(result: Dict, filename: str, request: ExportRequest) 
             fix_data = []
             for fr in fix_recommendations:
                 fix_data.append({
-                    "rule_id": getattr(fr, "rule_id", ""),
-                    "issue": getattr(fr, "issue_description", ""),
-                    "fix": getattr(fr, "recommended_fix", ""),
-                    "query": getattr(fr, "fix_query", ""),
-                    "action": getattr(fr, "user_action", "manual"),
+                    "rule_id": _get_val(fr, "rule_id", ""),
+                    "issue": _get_val(fr, "issue_description", ""),
+                    "fix": _get_val(fr, "recommended_fix", ""),
+                    "query": _get_val(fr, "fix_query", ""),
+                    "action": _get_val(fr, "user_action", "manual"),
                 })
             pd.DataFrame(fix_data).to_excel(writer, sheet_name="Fix Recommendations", index=False)
 
@@ -951,22 +959,22 @@ async def _export_to_json(result: Dict, filename: str, request: ExportRequest) -
         "summary_report": result.get("summary_report", {}),
         "validation_results": [
             {
-                "rule_name": getattr(vr, "rule_name", ""),
-                "status": getattr(vr, "status", ""),
-                "severity": getattr(vr, "severity", ""),
-                "failed_count": getattr(vr, "failed_count", 0),
-                "total_count": getattr(vr, "total_count", 0),
-                "failure_examples": getattr(vr, "failure_examples", [])[:50],
+                "rule_name": _get_val(vr, "rule_name", ""),
+                "status": _get_val(vr, "status", ""),
+                "severity": _get_val(vr, "severity", ""),
+                "failed_count": _get_val(vr, "failed_count", 0),
+                "total_count": _get_val(vr, "total_count", 0),
+                "failure_examples": _get_val(vr, "failure_examples", [])[:50],
             }
             for vr in result.get("validation_results", [])
         ],
         "fix_recommendations": [
             {
-                "rule_id": getattr(fr, "rule_id", ""),
-                "issue": getattr(fr, "issue_description", ""),
-                "fix": getattr(fr, "recommended_fix", ""),
-                "query": getattr(fr, "fix_query", ""),
-                "action": getattr(fr, "user_action", "manual"),
+                "rule_id": _get_val(fr, "rule_id", ""),
+                "issue": _get_val(fr, "issue_description", ""),
+                "fix": _get_val(fr, "recommended_fix", ""),
+                "query": _get_val(fr, "fix_query", ""),
+                "action": _get_val(fr, "user_action", "manual"),
             }
             for fr in result.get("fix_recommendations", [])
         ],
@@ -1004,29 +1012,29 @@ async def get_fix_recommendations(validation_id: str):
     fixes = []
     for f in fix_recommendations:
         fixes.append({
-            "rule_id": getattr(f, "rule_id", ""),
-            "rule_name": getattr(f, "rule_id", "").replace("agent_rule_", "Rule "), # Fallback if no rule_name
-            "issue_description": getattr(f, "issue_description", ""),
+            "rule_id": _get_val(f, "rule_id", ""),
+            "rule_name": _get_val(f, "rule_id", "").replace("agent_rule_", "Rule "), # Fallback if no rule_name
+            "issue_description": _get_val(f, "issue_description", ""),
             "status": "failed", # Only failed rules get fixes typically
-            "severity": getattr(f, "risk_level", "warning"),
-            "failed_count": getattr(f, "estimated_rows_affected", 0),
+            "severity": _get_val(f, "risk_level", "warning"),
+            "failed_count": _get_val(f, "estimated_rows_affected", 0),
             "total_rows": result.get("summary_report", {}).get("records_processed", 0),
-            "failure_percentage": (getattr(f, "estimated_rows_affected", 0) / max(1, result.get("summary_report", {}).get("records_processed", 1))) * 100,
+            "failure_percentage": (_get_val(f, "estimated_rows_affected", 0) / max(1, result.get("summary_report", {}).get("records_processed", 1))) * 100,
             "suggested_fixes": [
                 {
-                    "instruction": getattr(f, "recommended_fix", ""),
+                    "instruction": _get_val(f, "recommended_fix", ""),
                     "label": "Agent Recommended",
                 }
             ],
-            "executed_query": getattr(f, "fix_query", None),
+            "executed_query": _get_val(f, "fix_query", None),
         })
 
     # Also include passed rules for the UI
     validation_results = result.get("validation_results", [])
     for vr in validation_results:
-        if getattr(vr, "status", "") == "passed":
+        if _get_val(vr, "status", "") == "passed":
             fixes.append({
-                "rule_name": getattr(vr, "rule_name", ""),
+                "rule_name": _get_val(vr, "rule_name", ""),
                 "status": "passed",
                 "severity": "info",
             })
@@ -1035,9 +1043,9 @@ async def get_fix_recommendations(validation_id: str):
     for fix in fixes:
          if fix["status"] != "passed":
              for vr in validation_results:
-                 if getattr(vr, "rule_id", "") == fix.get("rule_id"):
-                     fix["rule_name"] = getattr(vr, "rule_name", fix.get("rule_name"))
-                     fix["failure_examples"] = getattr(vr, "failure_examples", [])
+                 if _get_val(vr, "rule_id", "") == fix.get("rule_id"):
+                     fix["rule_name"] = _get_val(vr, "rule_name", fix.get("rule_name"))
+                     fix["failure_examples"] = _get_val(vr, "failure_examples", [])
                      break
 
     return {
@@ -1137,7 +1145,7 @@ async def apply_fix_action(request: FixActionRequest):
 
     matching_fix = None
     for f in fix_recommendations:
-        if getattr(f, "rule_id", "") == request.rule_id:
+        if _get_val(f, "rule_id", "") == request.rule_id:
             matching_fix = f
             break
 
@@ -1147,11 +1155,11 @@ async def apply_fix_action(request: FixActionRequest):
     if request.action == "manual":
         status = "pending_manual"
         message = "Fix query provided for manual execution"
-        fix_query = getattr(matching_fix, "fix_query", None) or request.custom_fix_query
+        fix_query = _get_val(matching_fix, "fix_query", None) or request.custom_fix_query
     elif request.action == "auto_agent":
         status = "pending_auto"
         message = "Agent will execute fix automatically"
-        fix_query = getattr(matching_fix, "fix_query", None)
+        fix_query = _get_val(matching_fix, "fix_query", None)
     elif request.action == "skip":
         status = "skipped"
         message = "Fix skipped by user"

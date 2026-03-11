@@ -92,6 +92,8 @@ class ValidationResult:
     
     # Column this result belongs to — required for grouped dashboard display
     column_name: Optional[str] = None
+    # Original/Internal column name (if renamed via template)
+    internal_column: Optional[str] = None
 
     # Check origin tracking: "pre_built" (deterministic) or "llm_generated" (agent-created)
     check_origin: str = "pre_built"

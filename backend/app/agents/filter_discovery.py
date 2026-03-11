@@ -1013,9 +1013,15 @@ class DynamicFilterExecutor:
         elif ft == "search":
             mask = col.astype(str).str.contains(sel.text_pattern or "", case=False, na=False)
         elif ft == "is_null":
-            mask = col.isnull()
+            if col.dtype == object:
+                mask = col.isnull() | col.astype(str).str.strip().eq('')
+            else:
+                mask = col.isnull()
         elif ft == "is_not_null":
-            mask = col.notnull()
+            if col.dtype == object:
+                mask = col.notnull() & ~col.astype(str).str.strip().eq('')
+            else:
+                mask = col.notnull()
         else:
             mask = pd.Series(True, index=df.index)
 

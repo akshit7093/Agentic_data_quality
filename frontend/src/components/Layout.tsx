@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
 import { useLLMHealth } from '@/hooks/useSystem';
+import LogoImage from '@/components/793abe9dc7835161df534163b32ce4bb.png';
 
 interface LayoutProps {
   children: ReactNode;
@@ -53,16 +54,13 @@ export default function Layout({ children }: LayoutProps) {
           }`}
       >
         <div className="p-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shrink-0">
-              <svg viewBox="0 0 20 20" fill="none" className="w-3.5 h-3.5">
-                <rect x="2" y="2" width="7" height="7" rx="1.5" fill="black" opacity="0.9" />
-                <rect x="11" y="2" width="7" height="7" rx="1.5" fill="black" opacity="0.6" />
-                <rect x="2" y="11" width="7" height="7" rx="1.5" fill="black" opacity="0.6" />
-                <rect x="11" y="11" width="7" height="7" rx="1.5" fill="black" opacity="0.3" />
-              </svg>
-            </div>
-            <div className="font-black text-base tracking-widest text-white">HALE</div>
+          <div className="flex flex-col items-center gap-1">
+            <img
+              src={LogoImage}
+              alt="QC Agent Logo"
+              className="w-12 h-auto filter invert hue-rotate-180 drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]"
+            />
+            <div className="text-[10px] text-primary font-black tracking-widest uppercase filter drop-shadow-[0_0_5px_rgba(16,185,129,0.4)]">QC AGENT</div>
           </div>
           <button onClick={() => setSidebarOpen(false)} className="text-slate-400 hover:text-white">
             <X className="w-5 h-5" />
@@ -104,22 +102,13 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex w-64 flex-shrink-0 bg-emerald-dark border-r border-primary/20 flex-col">
-        <div className="p-6 flex items-center">
-          <div className="flex items-center gap-2.5">
-            {/* Logo mark */}
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-              <svg viewBox="0 0 20 20" fill="none" className="w-4 h-4">
-                <rect x="2" y="2" width="7" height="7" rx="1.5" fill="black" opacity="0.9" />
-                <rect x="11" y="2" width="7" height="7" rx="1.5" fill="black" opacity="0.6" />
-                <rect x="2" y="11" width="7" height="7" rx="1.5" fill="black" opacity="0.6" />
-                <rect x="11" y="11" width="7" height="7" rx="1.5" fill="black" opacity="0.3" />
-              </svg>
-            </div>
-            <div>
-              <div className="font-black text-base tracking-widest text-white leading-none">HALE</div>
-              <div className="text-[9px] text-primary font-bold tracking-[0.2em] uppercase leading-none mt-0.5">Data Quality</div>
-            </div>
-          </div>
+        <div className="flex flex-col items-center justify-center w-full py-4 space-y-2">
+          <img
+            src={LogoImage}
+            alt="QC Agent Logo"
+            className="w-24 h-auto filter invert hue-rotate-180 drop-shadow-[0_0_15px_rgba(16,185,129,0.9)]"
+          />
+          <div className="text-[10px] text-primary font-black tracking-[0.4em] uppercase filter drop-shadow-[0_0_8px_rgba(16,185,129,0.6)]">QC AGENT</div>
         </div>
         <nav className="flex-1 px-4 py-4 space-y-2">
           {navigation.map((item) => {

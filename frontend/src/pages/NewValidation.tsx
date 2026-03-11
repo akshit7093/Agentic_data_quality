@@ -27,6 +27,7 @@ import { dataSourceApi, fileApi, ruleGroupApi } from '@/services/api';
 import Modal from '@/components/Modal';
 import DataExplorer from '@/components/DataExplorer';
 import VisualPrep from '@/components/VisualPrep';
+import DetailedDataView from '@/components/DetailedDataView';
 
 
 interface DataResource {
@@ -89,13 +90,15 @@ const SOURCE_INFO: Record<string, { label: string; icon: any; color: string }> =
   'local-files': { label: 'Local Test Files', icon: Folder, color: 'orange' },
 };
 
+type ValidationStep = 'source' | 'browse' | 'view_data' | 'prep' | 'explore' | 'config' | 'review';
+
 export default function NewValidation() {
   const navigate = useNavigate();
   const { data: dataSources } = useDataSources();
   const submitValidation = useSubmitValidation();
   const { data: llmHealth } = useLLMHealth();
 
-  const [step, setStep] = useState<'source' | 'browse' | 'prep' | 'explore' | 'config' | 'review'>('source');
+  const [step, setStep] = useState<ValidationStep>('source');
   const [selectedDataSource, setSelectedDataSource] = useState<string>('');
   const [selectedResource, setSelectedResource] = useState<DataResource | null>(null);
   const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
@@ -139,6 +142,20 @@ export default function NewValidation() {
   // Rule groups
   const [ruleGroups, setRuleGroups] = useState<any[]>([]);
   const [selectedRuleGroup, setSelectedRuleGroup] = useState<string>('');
+
+  // Persistent component states
+  const [prepState, setPrepState] = useState<any>(null);
+  const [explorerState, setExplorerState] = useState<any>({
+    filterDraft: {},
+    pivotConfig: {
+      dimension: '',
+      dimension2: '',
+      measure: '',
+      agg: 'count',
+      result: null,
+      chart: null,
+    }
+  });
 
   // Fetch resources when data source changes
   useEffect(() => {
@@ -253,6 +270,7 @@ export default function NewValidation() {
         custom_rules: customRules,
         column_mapping: columnMapping,
         selected_columns: selectedColumns,
+        session_id: templateSessionId,
       };
 
       if (sliceFilters.length > 0) {
@@ -292,6 +310,7 @@ export default function NewValidation() {
       {[
         { id: 'source', label: 'Source', icon: Database },
         { id: 'browse', label: 'Browse', icon: Folder },
+        { id: 'view_data', label: 'View Data', icon: Eye },
         { id: 'prep', label: 'Prep', icon: Table },
         { id: 'explore', label: 'Explore', icon: Database },
         { id: 'config', label: 'Configure', icon: Settings },
@@ -300,25 +319,29 @@ export default function NewValidation() {
         const isActive = step === s.id;
         const isCompleted =
           (step === 'browse' && s.id === 'source') ||
-          (step === 'prep' && ['source', 'browse'].includes(s.id)) ||
-          (step === 'explore' && ['source', 'browse', 'prep'].includes(s.id)) ||
-          (step === 'config' && ['source', 'browse', 'prep', 'explore'].includes(s.id)) ||
-          (step === 'review' && ['source', 'browse', 'prep', 'explore', 'config'].includes(s.id));
+          (step === 'view_data' && ['source', 'browse'].includes(s.id)) ||
+          (step === 'prep' && ['source', 'browse', 'view_data'].includes(s.id)) ||
+          (step === 'explore' && ['source', 'browse', 'view_data', 'prep'].includes(s.id)) ||
+          (step === 'config' && ['source', 'browse', 'view_data', 'prep', 'explore'].includes(s.id)) ||
+          (step === 'review' && ['source', 'browse', 'view_data', 'prep', 'explore', 'config'].includes(s.id));
 
         return (
           <div key={s.id} className="flex items-center">
-            <div
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${isActive
-                ? 'bg-primary-100 text-primary-700'
+            <button
+              onClick={() => (isActive || isCompleted) && setStep(s.id as ValidationStep)}
+              disabled={!isActive && !isCompleted}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all ${isActive
+                ? 'bg-primary-100 text-primary-700 ring-2 ring-primary/20'
                 : isCompleted
-                  ? 'text-success-600'
-                  : 'text-gray-400'
+                  ? 'text-success-600 hover:bg-success-50 cursor-pointer'
+                  : 'text-gray-400 cursor-not-allowed'
                 }`}
+              title={isCompleted ? `Go back to ${s.label}` : s.label}
             >
               <s.icon className="w-5 h-5" />
               <span className="font-medium text-xs">{s.label}</span>
-            </div>
-            {idx < 5 && <ChevronRight className="w-5 h-5 text-gray-300 mx-1" />}
+            </button>
+            {idx < 6 && <ChevronRight className="w-5 h-5 text-gray-300 mx-1" />}
           </div>
         );
       })}
@@ -694,13 +717,15 @@ export default function NewValidation() {
           onClick={() => {
             if (selectedResource) {
               loadPreview(selectedResource);
+              // Also trigger discovery early if possible
+              loadDiscovery(templateSessionId);
             }
-            setStep('prep');
+            setStep('view_data');
           }}
           disabled={!selectedResource}
           className="btn-primary disabled:opacity-50"
         >
-          Continue
+          Continue to View Data
           <ChevronRight className="w-4 h-4 ml-2 inline" />
         </button>
       </div>
@@ -757,6 +782,49 @@ export default function NewValidation() {
       </Modal>
     </div>
   );
+  const renderViewDataStep = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-slate-100 uppercase tracking-widest">Data Inspection</h2>
+          <p className="text-slate-400 mt-1 italic">Review the full dataset and column-level profiling metrics</p>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex items-center px-3 py-1 bg-royal-green-800 border border-royal-green-600 rounded-lg">
+            <span className="text-[10px] font-black text-slate-500 uppercase mr-2">Resource:</span>
+            <span className="text-xs font-mono font-bold text-primary truncate max-w-[200px]">{selectedResource?.name}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="h-[600px]">
+        {previewData ? (
+          <DetailedDataView
+            previewData={previewData}
+            discoveryMetadata={discoveryMetadata}
+            pageSize={FULL_DATA_PAGE_SIZE}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full bg-royal-green-900 border border-royal-green-700 rounded-2xl">
+            <RefreshCw className="w-12 h-12 text-primary/20 animate-spin mb-4" />
+            <p className="text-slate-500 font-bold uppercase tracking-widest">Loading inspection engine...</p>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-between">
+        <button onClick={() => setStep('browse')} className="btn-secondary">
+          <ChevronLeft className="w-4 h-4 mr-2 inline" />
+          Back to Browse
+        </button>
+        <button onClick={() => setStep('prep')} className="btn-primary">
+          Continue to Column Mapping
+          <ChevronRight className="w-4 h-4 ml-2 inline" />
+        </button>
+      </div>
+    </div>
+  );
+
 
   const renderPrepStep = () => (
     <div className="space-y-6">
@@ -769,9 +837,11 @@ export default function NewValidation() {
         fileColumns={selectedResource?.columns || []}
         dataSourceId={selectedDataSource}
         resourcePath={selectedResource?.path || ''}
-        onComplete={(mapping, selected, sessionId, sessionInfo) => {
+        initialState={prepState}
+        onComplete={(mapping, selected, sessionId, sessionInfo, fullState) => {
           setColumnMapping(mapping);
           setSelectedColumns(selected);
+          setPrepState(fullState);
           if (sessionId) {
             setTemplateSessionId(sessionId);
             setTemplateSessionInfo(sessionInfo);
@@ -783,7 +853,7 @@ export default function NewValidation() {
       />
 
       <div className="flex justify-between">
-        <button onClick={() => setStep('browse')} className="btn-secondary">
+        <button onClick={() => setStep('view_data')} className="btn-secondary">
           <ChevronLeft className="w-4 h-4 mr-2 inline" />
           Back
         </button>
@@ -809,6 +879,8 @@ export default function NewValidation() {
         onViewCompleteData={() => setShowFullDataModal(true)}
         templateSessionId={templateSessionId}
         templateSessionInfo={templateSessionInfo}
+        initialState={explorerState}
+        onStateChange={(state) => setExplorerState(state)}
       />
 
       {/* ── Full Data Viewer Modal ── */}
@@ -890,7 +962,7 @@ export default function NewValidation() {
       )}
 
       <div className="flex justify-between">
-        <button onClick={() => setStep('browse')} className="btn-secondary">
+        <button onClick={() => setStep('prep')} className="btn-secondary">
           <ChevronLeft className="w-4 h-4 mr-2 inline" />
           Back
         </button>
@@ -1406,6 +1478,7 @@ export default function NewValidation() {
       <div className="max-w-4xl mx-auto">
         {step === 'source' && renderSourceStep()}
         {step === 'browse' && renderBrowseStep()}
+        {step === 'view_data' && renderViewDataStep()}
         {step === 'prep' && renderPrepStep()}
         {step === 'explore' && renderExploreStep()}
         {step === 'config' && renderConfigStep()}

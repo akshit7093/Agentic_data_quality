@@ -43,17 +43,29 @@ interface VisualPrepProps {
     fileColumns: Column[];
     dataSourceId: string;
     resourcePath: string;
-    onComplete: (mapping: Record<string, string>, selectedColumns: string[], sessionId?: string, sessionInfo?: any) => void;
+    initialState?: {
+        selectedTemplateId: string;
+        mappings: MatchResult[];
+        nameThreshold: number;
+        requireDtype: boolean;
+    } | null;
+    onComplete: (
+        mapping: Record<string, string>,
+        selectedColumns: string[],
+        sessionId?: string,
+        sessionInfo?: any,
+        fullState?: any
+    ) => void;
 }
 
-export default function VisualPrep({ fileColumns, dataSourceId, resourcePath, onComplete }: VisualPrepProps) {
+export default function VisualPrep({ fileColumns, dataSourceId, resourcePath, initialState, onComplete }: VisualPrepProps) {
     const [templates, setTemplates] = useState<Template[]>([]);
-    const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-    const [mappings, setMappings] = useState<MatchResult[]>([]);
+    const [selectedTemplateId, setSelectedTemplateId] = useState<string>(initialState?.selectedTemplateId || '');
+    const [mappings, setMappings] = useState<MatchResult[]>(initialState?.mappings || []);
     const [loading, setLoading] = useState(false);
     const [applying, setApplying] = useState(false);
-    const [nameThreshold, setNameThreshold] = useState(70);
-    const [requireDtype, setRequireDtype] = useState(true);
+    const [nameThreshold, setNameThreshold] = useState(initialState?.nameThreshold || 70);
+    const [requireDtype, setRequireDtype] = useState(initialState?.requireDtype ?? true);
     const [matchReport, setMatchReport] = useState<any>(null);
 
     // Derived lists for sections
@@ -205,6 +217,13 @@ export default function VisualPrep({ fileColumns, dataSourceId, resourcePath, on
         // Prepare final analysis columns
         const selectedColumns = confirmedMappings.map(m => m.output_name);
 
+        const fullState = {
+            selectedTemplateId,
+            mappings,
+            nameThreshold,
+            requireDtype,
+        };
+
         if (selectedTemplateId) {
             setApplying(true);
             try {
@@ -228,7 +247,7 @@ export default function VisualPrep({ fileColumns, dataSourceId, resourcePath, on
                     row_count: data.row_count,
                     templateName: selectedTemplate?.name || 'Template',
                     rename_map: data.rename_map,
-                });
+                }, fullState);
             } catch (e) {
                 console.error('Apply failed:', e);
             } finally {
@@ -237,7 +256,7 @@ export default function VisualPrep({ fileColumns, dataSourceId, resourcePath, on
         } else {
             const finalMapping: Record<string, string> = {};
             confirmedMappings.forEach(c => { if (c.file_col !== c.output_name) finalMapping[c.file_col] = c.output_name; });
-            onComplete(finalMapping, selectedColumns);
+            onComplete(finalMapping, selectedColumns, undefined, undefined, fullState);
         }
     };
 

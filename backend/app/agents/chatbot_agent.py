@@ -34,7 +34,13 @@ def _make_connector(
             column_mapping=column_mapping,
             slice_filters=slice_filters
         )
-    return ConnectorFactory.create_connector(source_type, connection_config)
+    return ConnectorFactory.create_connector(
+        source_type, 
+        connection_config,
+        selected_columns=selected_columns,
+        column_mapping=column_mapping,
+        slice_filters=slice_filters
+    )
 from app.agents.tool_based_agent import ValidationToolExecutor
 from app.agents.filter_discovery import DiscoveryManager, UserFilterSelection, UserPivotSelection
 from app.agents.chart_engine import ChartEngine

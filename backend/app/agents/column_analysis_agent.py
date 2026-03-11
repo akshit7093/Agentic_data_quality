@@ -124,8 +124,10 @@ class ColumnAnalysisAgent:
         source_type: str = "sqlite",
         rag_context: str = "",
         existing_rule_names: Optional[List[str]] = None,
+        display_name: Optional[str] = None,
     ):
         self.column_name = column_name
+        self.display_name = display_name or column_name
         self.dtype = dtype
         self.samples = samples
         self.mode = mode.lower()
@@ -199,7 +201,8 @@ class ColumnAnalysisAgent:
             rag_section = f"\n\nRELEVANT CONTEXT FROM PRIOR ANALYSIS:\n{self.rag_context[:800]}\n"
 
         return (
-            f"Target Column: {self.column_name}\n"
+            f"Target Column (Internal): {self.column_name}\n"
+            f"Display Name (UI): {self.display_name}\n"
             f"Data Type: {self.dtype}\n"
             f"Sample Values: {self.samples[:20]}\n"
             f"{rag_section}"
@@ -403,19 +406,20 @@ class ColumnAnalysisAgent:
                 "rule_type": "llm_generated_sql",
                 "executed_query": ex["query"],
                 "check_origin": "llm_generated",
-                "column_name": self.column_name,
+                "column_name": self.display_name, # Use display name for UI reporting
+                "internal_column": self.column_name,
             })
 
         score = 100.0 if total == 0 else round(((passed + warns * 0.5) / total) * 100, 2)
 
         return ColumnQualityReport(
-            column_name=self.column_name,
+            column_name=self.display_name, # Use display name for report
             dtype=self.dtype,
             mode=self.mode,
             validation_results=parsed,
             score=score,
             summary=(
-                f"Analyzed {total} LLM rules for {self.column_name}: "
+                f"Analyzed {total} LLM rules for {self.display_name}: "
                 f"{passed} passed, {warns} warnings, {crits} critical."
             ),
         )
@@ -480,7 +484,7 @@ class ColumnAnalysisAgent:
 
         return f"""You are an Advanced Data Quality AI specialising in SQL-based column validation.
 
-COLUMN: "{self.column_name}" | TYPE: {self.dtype}
+COLUMN: "{self.column_name}" (Display: "{self.display_name}") | TYPE: {self.dtype}
 TABLE: "{table_name}"
 COLUMN HINT: {type_hint}
 
@@ -515,7 +519,7 @@ CRITICAL RULES:
         mode_instruction = MODE_INSTRUCTIONS.get(self.mode, MODE_INSTRUCTIONS["ai_recommended"])
         return f"""You are an Advanced Data Quality AI generating Pandas validation rules.
 
-COLUMN: "{self.column_name}" | TYPE: {self.dtype}
+COLUMN: "{self.column_name}" (Display: "{self.display_name}") | TYPE: {self.dtype}
 
 {mode_instruction}
 
@@ -606,7 +610,11 @@ ALREADY EXECUTED (DO NOT DUPLICATE):
         print(f"[DEBUG] columns in schema_data: {list(self.schema_data.keys())}")
 
         schema_dump = json.dumps({
-            col: {"type": info["dtype"], "samples": info["samples"][:10]}
+            col: {
+                "type": info["dtype"], 
+                "samples": info["samples"][:10],
+                "display_name": info.get("display_name", col)
+            }
             for col, info in self.schema_data.items()
         }, indent=2)
 
@@ -746,17 +754,18 @@ ALREADY EXECUTED (DO NOT DUPLICATE):
                     "rule_type": "llm_generated_sql",
                     "executed_query": ex["query"],
                     "check_origin": "llm_generated",
-                    "column_name": col_name,
+                    "column_name": self.schema_data[col_name].get("display_name", col_name),
                 })
 
             score = 100.0 if total == 0 else round(((passed + warns * 0.5) / total) * 100, 2)
+            display_name = self.schema_data[col_name].get("display_name", col_name)
             reports[col_name] = ColumnQualityReport(
-                column_name=col_name,
+                column_name=display_name,
                 dtype=self.schema_data[col_name]["dtype"],
                 mode=self.mode,
                 validation_results=parsed,
                 score=score,
-                summary=f"Batch: {total} rules for {col_name}: {passed} passed, {warns} warnings, {crits} critical.",
+                summary=f"Batch: {total} rules for {display_name}: {passed} passed, {warns} warnings, {crits} critical.",
             )
 
         return reports
