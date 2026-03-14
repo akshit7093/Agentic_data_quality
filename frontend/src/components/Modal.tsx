@@ -42,14 +42,14 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
     <div className="fixed inset-0 z-50 overflow-y-auto">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-gray-900/50 transition-opacity"
+        className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
 
       {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div
-          className={`relative w-full ${sizeClasses[size]} bg-surface-dark border border-primary/20 rounded-xl shadow-[0_0_30px_rgba(16,183,127,0.15)] transform transition-all`}
+          className={`relative w-full ${sizeClasses[size]} bg-surface-dark/95 border border-primary/20 rounded-xl shadow-[0_0_30px_rgba(16,183,127,0.15)] transform transition-all`}
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -57,9 +57,10 @@ export default function Modal({ isOpen, onClose, title, children, size = 'md' }:
             <h3 className="text-lg font-black tracking-wide text-slate-100 uppercase">{title}</h3>
             <button
               onClick={onClose}
+              aria-label="Close modal"
               className="p-1 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
 
